@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime, timedelta
 from typing import Annotated
 from jose import jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.database import get_database
@@ -13,14 +13,19 @@ from app.core.config import settings
 router = APIRouter()
 
 # Password handling
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password handling
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(pwd_bytes, salt)
+    return hashed_password.decode('utf-8')
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    pwd_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(pwd_bytes, hashed_bytes)
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
