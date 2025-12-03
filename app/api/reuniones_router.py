@@ -59,9 +59,9 @@ async def get_all_reuniones(
 @router.get("/{reunion_id}", response_model=ReunionResponse)
 async def get_reunion(
     reunion_id: str,
-    current_user: dict = Depends(get_current_admin)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Obtener una reunión por ID (Solo administradores)"""
+    """Obtener una reunión por ID (Administradores y Padres)"""
     db = get_database()
     collection = db["reuniones"]
     
