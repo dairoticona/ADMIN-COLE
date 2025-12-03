@@ -40,9 +40,9 @@ async def create_reunion(
 async def get_all_reuniones(
     skip: int = 0, 
     limit: int = 100,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_admin)
 ):
-    """Obtener todas las reuniones (Administradores y Padres)"""
+    """Obtener todas las reuniones (Solo administradores)"""
     db = get_database()
     collection = db["reuniones"]
     
@@ -59,9 +59,9 @@ async def get_all_reuniones(
 @router.get("/{reunion_id}", response_model=ReunionResponse)
 async def get_reunion(
     reunion_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_admin)
 ):
-    """Obtener una reunión por ID (Administradores y Padres)"""
+    """Obtener una reunión por ID (Solo administradores)"""
     db = get_database()
     collection = db["reuniones"]
     

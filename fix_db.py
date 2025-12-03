@@ -14,8 +14,8 @@ async def fix_users():
         
         # Fix Role - Default to PADRE if missing
         if "role" not in user:
-            # Si es el super admin brandon, asegurar que sea ADMIN
-            if user.get("username") == "brandon":
+            # Si es el super admin brandon o admin, asegurar que sea ADMIN
+            if user.get("username") in ["brandon", "admin"]:
                 update_fields["role"] = "ADMIN"
                 update_fields["is_superuser"] = True
             else:
