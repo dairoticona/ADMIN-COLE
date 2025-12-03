@@ -4,11 +4,12 @@ from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection
 from app.api.auth_router import router as auth_router
 from app.api.reuniones_router import router as reuniones_router
+from app.api.padres_router import router as padres_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Admin Cole API - Auth & Reuniones"
+    description="Admin Cole API - Auth, Reuniones & Padres"
 )
 
 # CORS middleware
@@ -32,6 +33,7 @@ async def shutdown_db_client():
 
 # Include routers
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(padres_router, prefix="/api/padres", tags=["padres"])
 app.include_router(reuniones_router, prefix="/api/reuniones", tags=["reuniones"])
 
 @app.get("/")
