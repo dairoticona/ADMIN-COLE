@@ -37,11 +37,19 @@ class PyObjectId(str):
         return handler(core_schema.str_schema())
 
 
+from enum import Enum
+
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    PADRE = "PADRE"
+
 class UserModel(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     email: EmailStr
     username: str
-    full_name: Optional[str] = None
+    nombre: str
+    apellido: str
+    role: UserRole
     hashed_password: str
     is_active: bool = True
     is_superuser: bool = False
@@ -56,7 +64,9 @@ class UserModel(BaseModel):
             "example": {
                 "email": "user@example.com",
                 "username": "johndoe",
-                "full_name": "John Doe",
+                "nombre": "John",
+                "apellido": "Doe",
+                "role": "PADRE",
                 "is_active": True,
                 "is_superuser": False
             }

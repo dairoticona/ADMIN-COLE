@@ -1,17 +1,21 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from datetime import datetime
 from bson import ObjectId
 
 from app.core.database import get_database
 from app.schemas.reunion_schema import ReunionCreate, ReunionUpdate, ReunionResponse
+from app.api.auth_router import get_current_user, get_current_admin
 
 router = APIRouter()
 
 
 @router.post("/", response_model=ReunionResponse, status_code=status.HTTP_201_CREATED)
-async def create_reunion(reunion_data: ReunionCreate):
-    """Crear una nueva reunión"""
+async def create_reunion(
+    reunion_data: ReunionCreate,
+    current_user: dict = Depends(get_current_admin)
+):
+    """Crear una nueva reunión (Solo administradores)"""
     db = get_database()
     collection = db["reuniones"]
     
@@ -33,8 +37,12 @@ async def create_reunion(reunion_data: ReunionCreate):
 
 
 @router.get("/", response_model=List[ReunionResponse])
-async def get_all_reuniones(skip: int = 0, limit: int = 100):
-    """Obtener todas las reuniones"""
+async def get_all_reuniones(
+    skip: int = 0, 
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
+):
+    """Obtener todas las reuniones (Administradores y Padres)"""
     db = get_database()
     collection = db["reuniones"]
     
@@ -49,8 +57,11 @@ async def get_all_reuniones(skip: int = 0, limit: int = 100):
 
 
 @router.get("/{reunion_id}", response_model=ReunionResponse)
-async def get_reunion(reunion_id: str):
-    """Obtener una reunión por ID"""
+async def get_reunion(
+    reunion_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Obtener una reunión por ID (Administradores y Padres)"""
     db = get_database()
     collection = db["reuniones"]
     
@@ -74,8 +85,12 @@ async def get_reunion(reunion_id: str):
 
 
 @router.put("/{reunion_id}", response_model=ReunionResponse)
-async def update_reunion(reunion_id: str, reunion_data: ReunionUpdate):
-    """Actualizar una reunión"""
+async def update_reunion(
+    reunion_id: str, 
+    reunion_data: ReunionUpdate,
+    current_user: dict = Depends(get_current_admin)
+):
+    """Actualizar una reunión (Solo administradores)"""
     db = get_database()
     collection = db["reuniones"]
     
@@ -119,8 +134,11 @@ async def update_reunion(reunion_id: str, reunion_data: ReunionUpdate):
 
 
 @router.delete("/{reunion_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_reunion(reunion_id: str):
-    """Eliminar una reunión"""
+async def delete_reunion(
+    reunion_id: str,
+    current_user: dict = Depends(get_current_admin)
+):
+    """Eliminar una reunión (Solo administradores)"""
     db = get_database()
     collection = db["reuniones"]
     
