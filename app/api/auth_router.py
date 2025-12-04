@@ -79,6 +79,8 @@ async def register(user_data: PadreRegisterRequest):
     user_dict = user_data.model_dump(exclude={"password"})
     user_dict["hashed_password"] = get_password_hash(user_data.password)
     user_dict["role"] = UserRole.PADRE
+    user_dict["nombre"] = ""  # Campo opcional, se puede actualizar después
+    user_dict["apellido"] = ""  # Campo opcional, se puede actualizar después
     user_dict["created_at"] = datetime.utcnow()
     user_dict["updated_at"] = datetime.utcnow()
     user_dict["is_active"] = True

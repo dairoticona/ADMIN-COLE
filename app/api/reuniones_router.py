@@ -40,9 +40,9 @@ async def create_reunion(
 async def get_all_reuniones(
     skip: int = 0, 
     limit: int = 100,
-    current_user: dict = Depends(get_current_admin)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Obtener todas las reuniones (Solo administradores)"""
+    """Obtener todas las reuniones (Administradores y Padres)"""
     db = get_database()
     collection = db["reuniones"]
     

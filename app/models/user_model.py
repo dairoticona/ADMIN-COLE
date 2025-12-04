@@ -48,7 +48,7 @@ class UserModel(BaseModel):
     email: EmailStr
     username: str
     nombre: str
-    apellido: str
+    apellido: Optional[str] = ""
     role: UserRole
     hashed_password: str
     is_active: bool = True

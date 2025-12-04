@@ -8,15 +8,13 @@ class UserBase(BaseModel):
     email: EmailStr
     username: str
     nombre: str
-    apellido: str
+    apellido: Optional[str] = ""
     role: UserRole
 
 class PadreRegisterRequest(BaseModel):
-    email: EmailStr
     username: str
-    nombre: str
-    apellido: str
     password: str = Field(..., min_length=6)
+    email: EmailStr
 
 class AdminCreateRequest(BaseModel):
     username: str
