@@ -6,11 +6,12 @@ from app.api.auth_router import router as auth_router
 from app.api.admin_router import router as admin_router
 from app.api.reuniones_router import router as reuniones_router
 from app.api.licencias_router import router as licencias_router
+from app.api.hijos_router import router as hijos_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Admin Cole API - Auth, Admin, Reuniones & Licencias"
+    description="Admin Cole API - Auth, Admin, Reuniones, Licencias & Hijos"
 )
 
 # CORS middleware
@@ -38,6 +39,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(reuniones_router, prefix="/api/reuniones", tags=["reuniones"])
 app.include_router(licencias_router, prefix="/api/licencias", tags=["licencias"])
+app.include_router(hijos_router, prefix="/api/hijos", tags=["hijos"])
 
 @app.get("/")
 async def root():

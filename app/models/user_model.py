@@ -47,9 +47,9 @@ class UserModel(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     email: EmailStr
     username: str
-    nombre: str
+    nombre: Optional[str] = ""
     apellido: Optional[str] = ""
-    role: UserRole
+    role: Optional[UserRole] = None
     hashed_password: str
     is_active: bool = True
     is_superuser: bool = False

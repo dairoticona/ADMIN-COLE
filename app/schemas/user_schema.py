@@ -7,14 +7,16 @@ from app.models.user_model import UserRole
 class UserBase(BaseModel):
     email: EmailStr
     username: str
-    nombre: str
+    nombre: Optional[str] = ""
     apellido: Optional[str] = ""
-    role: UserRole
+    role: Optional[UserRole] = None
 
 class PadreRegisterRequest(BaseModel):
-    username: str
-    password: str = Field(..., min_length=6)
-    email: EmailStr
+    username: str = Field(..., min_length=3, description="Nombre de usuario")
+    password: str = Field(..., min_length=6, description="Contraseña")
+    email: EmailStr = Field(..., description="Correo electrónico")
+    nombre: str = Field(..., min_length=1, description="Nombre del padre")
+    apellido: str = Field(..., min_length=1, description="Apellido del padre")
 
 class AdminCreateRequest(BaseModel):
     username: str

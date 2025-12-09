@@ -25,14 +25,42 @@ async def create_licencia(
         )
     
     db = get_database()
-    collection = db["licencias"]
+    
+    # Validar que el hijo_id sea válido
+    if not ObjectId.is_valid(licencia_data.hijo_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ID de hijo inválido"
+        )
+    
+    # Buscar el hijo en la base de datos
+    hijos_collection = db["hijos"]
+    hijo = await hijos_collection.find_one({"_id": ObjectId(licencia_data.hijo_id)})
+    
+    if not hijo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hijo no encontrado"
+        )
+    
+    # Verificar que el hijo pertenezca al padre autenticado
+    if hijo["padre_id"] != current_user["_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tiene permisos para crear licencias para este hijo"
+        )
+    
+    licencias_collection = db["licencias"]
     
     # Crear el documento de licencia
     licencia_dict = licencia_data.model_dump()
     
+    # Auto-rellenar datos del estudiante desde el hijo
+    licencia_dict["nombre_estudiante"] = f"{hijo['nombre']} {hijo['apellido']}"
+    licencia_dict["grado_estudiante"] = hijo["curso"]
+    
     # Convertir enums a strings
     licencia_dict["tipo_permiso"] = licencia_dict["tipo_permiso"].value if hasattr(licencia_dict["tipo_permiso"], "value") else licencia_dict["tipo_permiso"]
-    licencia_dict["grado_estudiante"] = licencia_dict["grado_estudiante"].value if hasattr(licencia_dict["grado_estudiante"], "value") else licencia_dict["grado_estudiante"]
     
     # Convertir date a datetime para MongoDB
     if isinstance(licencia_dict["fecha"], date) and not isinstance(licencia_dict["fecha"], datetime):
@@ -49,7 +77,7 @@ async def create_licencia(
     licencia_dict["created_at"] = datetime.utcnow()
     licencia_dict["updated_at"] = datetime.utcnow()
     
-    result = await collection.insert_one(licencia_dict)
+    result = await licencias_collection.insert_one(licencia_dict)
     
     # Retornar la licencia creada
     licencia_dict["_id"] = str(result.inserted_id)
@@ -186,8 +214,6 @@ async def update_licencia(
         # Convertir enums a strings si están presentes
         if "tipo_permiso" in update_data:
             update_data["tipo_permiso"] = update_data["tipo_permiso"].value if hasattr(update_data["tipo_permiso"], "value") else update_data["tipo_permiso"]
-        if "grado_estudiante" in update_data:
-            update_data["grado_estudiante"] = update_data["grado_estudiante"].value if hasattr(update_data["grado_estudiante"], "value") else update_data["grado_estudiante"]
         
         # Convertir date a datetime para MongoDB si está presente
         if "fecha" in update_data and isinstance(update_data["fecha"], date) and not isinstance(update_data["fecha"], datetime):
