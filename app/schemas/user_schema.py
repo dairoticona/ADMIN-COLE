@@ -31,8 +31,8 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: PyObjectId = Field(..., alias="_id")
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

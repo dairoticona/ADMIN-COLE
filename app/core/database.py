@@ -41,7 +41,7 @@ def get_database():
 
 async def create_super_admin():
     """Create super admin user if not exists"""
-    from app.models.user_model import UserRole
+    from app.models.common import UserRole
     from app.core.security import get_password_hash
     
     db_instance = get_database()

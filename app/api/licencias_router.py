@@ -4,7 +4,7 @@ from datetime import datetime, date
 from bson import ObjectId
 
 from app.core.database import get_database
-from app.models.user_model import UserRole
+from app.models.common import UserRole
 from app.schemas.licencia_schema import LicenciaCreate, LicenciaUpdate, LicenciaResponse
 from app.api.auth_router import get_current_user, get_current_admin
 
@@ -37,10 +37,11 @@ async def create_licencia(
     estudiantes_collection = db["estudiantes"]
     estudiante = await estudiantes_collection.find_one({"_id": ObjectId(licencia_data.estudiante_id)})
     
+    print(f"DEBUG: Buscando estudiante con ID: {licencia_data.estudiante_id}")
     if not estudiante:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Estudiante no encontrado"
+            detail=f"Estudiante con ID {licencia_data.estudiante_id} no encontrado"
         )
     
     # Verificar que el estudiante pertenezca al padre autenticado (usando hijos_ids del usuario)

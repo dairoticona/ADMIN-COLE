@@ -29,6 +29,11 @@ class PyObjectId(str):
             raise ValueError("Invalid ObjectId")
         return ObjectId(v)
 
+from enum import Enum
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    PADRE = "PADRE"
+
     @classmethod
     def __get_pydantic_json_schema__(
         cls, _core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler

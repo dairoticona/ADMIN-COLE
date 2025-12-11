@@ -4,10 +4,11 @@ from typing import List
 from bson import ObjectId
 
 from app.core.database import get_database
-from app.models.user_model import UserRole
-from app.schemas.user_schema import (
+from app.core.database import get_database
+from app.models.common import UserRole
+from app.schemas.auth_schemas import AuthUserResponse
+from app.schemas.admin_schemas import (
     AdminCreateRequest, 
-    UserResponse, 
     ChangePasswordRequest, 
     UpdateProfileRequest
 )
@@ -16,7 +17,7 @@ from app.core.security import get_password_hash, verify_password
 
 router = APIRouter()
 
-@router.post("/create-admin", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/create-admin", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
 async def create_admin(
     admin_data: AdminCreateRequest, 
     current_user: dict = Depends(get_current_admin)
@@ -84,7 +85,7 @@ async def change_password(
     
     return {"message": "Contraseña actualizada correctamente"}
 
-@router.put("/update-profile", response_model=UserResponse)
+@router.put("/update-profile", response_model=AuthUserResponse)
 async def update_profile(
     profile_data: UpdateProfileRequest,
     current_user: dict = Depends(get_current_admin)
@@ -116,7 +117,7 @@ async def update_profile(
     
     return updated_user
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=List[AuthUserResponse])
 async def get_all_users(
     skip: int = 0, 
     limit: int = 100,
@@ -127,7 +128,8 @@ async def get_all_users(
     collection = db["users"]
     
     users = []
-    cursor = collection.find().skip(skip).limit(limit).sort("created_at", -1)
+    users = []
+    cursor = collection.find({"role": UserRole.ADMIN}).skip(skip).limit(limit).sort("created_at", -1)
     
     async for user in cursor:
         user["_id"] = str(user["_id"])

@@ -11,7 +11,7 @@ from app.api.eventos_router import router as eventos_router
 from app.api.libretas_router import router as libretas_router
 from app.api.mallas_router import router as mallas_router
 from app.api.pagos_router import router as pagos_router
-from app.api.users_router import router as users_router
+from app.api.papas_router import router as papas_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -40,6 +40,7 @@ async def shutdown_db_client():
     await close_mongo_connection()
 
 # Include routers
+app.include_router(papas_router, prefix="/api/papas", tags=["papas"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(licencias_router, prefix="/api/licencias", tags=["licencias"])
@@ -49,7 +50,7 @@ app.include_router(eventos_router, prefix="/api/eventos", tags=["eventos"])
 app.include_router(libretas_router, prefix="/api/libretas", tags=["libretas"])
 app.include_router(mallas_router, prefix="/api/mallas", tags=["mallas"])
 app.include_router(pagos_router, prefix="/api/pagos", tags=["pagos"])
-app.include_router(users_router, prefix="/api/users", tags=["users"])
+
 
 @app.get("/")
 async def root():
