@@ -26,28 +26,33 @@ async def create_licencia(
     
     db = get_database()
     
-    # Validar que el hijo_id sea válido
-    if not ObjectId.is_valid(licencia_data.hijo_id):
+    # Validar que el estudiante_id sea válido
+    if not ObjectId.is_valid(licencia_data.estudiante_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="ID de hijo inválido"
+            detail="ID de estudiante inválido"
         )
     
-    # Buscar el hijo en la base de datos
-    hijos_collection = db["hijos"]
-    hijo = await hijos_collection.find_one({"_id": ObjectId(licencia_data.hijo_id)})
+    # Verificar que el estudiante existe en la colección 'estudiantes'
+    estudiantes_collection = db["estudiantes"]
+    estudiante = await estudiantes_collection.find_one({"_id": ObjectId(licencia_data.estudiante_id)})
     
-    if not hijo:
+    if not estudiante:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Hijo no encontrado"
+            detail="Estudiante no encontrado"
         )
     
-    # Verificar que el hijo pertenezca al padre autenticado
-    if hijo["padre_id"] != current_user["_id"]:
+    # Verificar que el estudiante pertenezca al padre autenticado (usando hijos_ids del usuario)
+    # Nota: current_user["hijos_ids"] es una lista de strings
+    user_hijos_ids = current_user.get("hijos_ids", [])
+    if str(estudiante["_id"]) not in user_hijos_ids:
+        # Fallback por si la relación no está sincronizada en User, verificamos por lógica de negocio
+        # Pero si 'padres_ids' fue eliminado de Estudiante, dependemos de User.hijos_ids.
+        # Asumimos que user_hijos_ids es la fuente de verdad.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para crear licencias para este hijo"
+            detail="No tiene permisos para crear licencias para este estudiante"
         )
     
     licencias_collection = db["licencias"]
@@ -55,22 +60,19 @@ async def create_licencia(
     # Crear el documento de licencia
     licencia_dict = licencia_data.model_dump()
     
-    # Auto-rellenar datos del estudiante desde el hijo
-    licencia_dict["nombre_estudiante"] = f"{hijo['nombre']} {hijo['apellido']}"
-    licencia_dict["grado_estudiante"] = hijo["curso"]
+    # Auto-rellenar el padre_id con el usuario actual si no coincide (forzar autoría)
+    licencia_dict["padre_id"] = current_user["_id"]
     
     # Convertir enums a strings
-    licencia_dict["tipo_permiso"] = licencia_dict["tipo_permiso"].value if hasattr(licencia_dict["tipo_permiso"], "value") else licencia_dict["tipo_permiso"]
-    
+    if "estado" in licencia_dict and hasattr(licencia_dict["estado"], "value"):
+        licencia_dict["estado"] = licencia_dict["estado"].value
+        
     # Convertir date a datetime para MongoDB
-    if isinstance(licencia_dict["fecha"], date) and not isinstance(licencia_dict["fecha"], datetime):
-        licencia_dict["fecha"] = datetime.combine(licencia_dict["fecha"], datetime.min.time())
-    
-    # Auto-rellenar el nombre del padre desde el usuario autenticado
-    licencia_dict["nombre_padre"] = f"{current_user.get('nombre', '')} {current_user.get('apellido', '')}".strip()
-    if not licencia_dict["nombre_padre"]:
-        licencia_dict["nombre_padre"] = current_user["username"]
-    
+    if isinstance(licencia_dict["fecha_inicio"], date) and not isinstance(licencia_dict["fecha_inicio"], datetime):
+        licencia_dict["fecha_inicio"] = datetime.combine(licencia_dict["fecha_inicio"], datetime.min.time())
+    if isinstance(licencia_dict["fecha_fin"], date) and not isinstance(licencia_dict["fecha_fin"], datetime):
+        licencia_dict["fecha_fin"] = datetime.combine(licencia_dict["fecha_fin"], datetime.min.time())
+
     # Establecer estado inicial como PENDIENTE
     licencia_dict["estado"] = "PENDIENTE"
     
@@ -81,9 +83,11 @@ async def create_licencia(
     
     # Retornar la licencia creada
     licencia_dict["_id"] = str(result.inserted_id)
-    # Convertir fecha de vuelta a date para la respuesta
-    if isinstance(licencia_dict["fecha"], datetime):
-        licencia_dict["fecha"] = licencia_dict["fecha"].date()
+    # Convertir fechas de vuelta a date para la respuesta
+    if isinstance(licencia_dict["fecha_inicio"], datetime):
+        licencia_dict["fecha_inicio"] = licencia_dict["fecha_inicio"].date()
+    if isinstance(licencia_dict["fecha_fin"], datetime):
+        licencia_dict["fecha_fin"] = licencia_dict["fecha_fin"].date()
     
     return licencia_dict
 
@@ -103,20 +107,22 @@ async def list_licencias(current_user: dict = Depends(get_current_user)):
         # Los administradores ven todas las licencias
         filter_query = {}
     else:
-        # Los padres solo ven sus propias licencias
-        nombre_padre = f"{current_user.get('nombre', '')} {current_user.get('apellido', '')}".strip()
-        if not nombre_padre:
-            nombre_padre = current_user["username"]
-        filter_query = {"nombre_padre": nombre_padre}
+        # Los padres solo ven sus propias licencias (filtrar por padre_id)
+        # Asegurarse de usar el ObjectId correcto
+        filter_query = {"padre_id": ObjectId(current_user["_id"]) if isinstance(current_user["_id"], str) else current_user["_id"]}
+        # Nota: Si en la DB se guardó como string, esto fallaría. 
+        # Pero insertamos usando ObjectId si viene del modelo, o string si pydantic.
+        # LicenciaModel define padre_id como PyObjectId, asi que en mongo es ObjectId.
     
     licencias = await collection.find(filter_query).to_list(length=None)
     
-    # Convertir ObjectId a string y fecha a date
+    # Convertir ObjectId a string y fechas a date
     for licencia in licencias:
         licencia["_id"] = str(licencia["_id"])
-        # Convertir fecha de datetime a date si es necesario
-        if "fecha" in licencia and isinstance(licencia["fecha"], datetime):
-            licencia["fecha"] = licencia["fecha"].date()
+        if "fecha_inicio" in licencia and isinstance(licencia["fecha_inicio"], datetime):
+            licencia["fecha_inicio"] = licencia["fecha_inicio"].date()
+        if "fecha_fin" in licencia and isinstance(licencia["fecha_fin"], datetime):
+            licencia["fecha_fin"] = licencia["fecha_fin"].date()
     
     return licencias
 
@@ -146,20 +152,22 @@ async def get_licencia(
     
     # Verificar permisos: solo el padre propietario o un admin pueden ver la licencia
     if current_user["role"] != UserRole.ADMIN:
-        nombre_padre = f"{current_user.get('nombre', '')} {current_user.get('apellido', '')}".strip()
-        if not nombre_padre:
-            nombre_padre = current_user["username"]
+        # Comparar ObjectId con ObjectId
+        licencia_padre_id = licencia.get("padre_id")
+        user_id = current_user["_id"]
         
-        if licencia["nombre_padre"] != nombre_padre:
+        # Normalizar a string para comparar
+        if str(licencia_padre_id) != str(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tiene permisos para ver esta licencia"
             )
     
     licencia["_id"] = str(licencia["_id"])
-    # Convertir fecha de datetime a date si es necesario
-    if "fecha" in licencia and isinstance(licencia["fecha"], datetime):
-        licencia["fecha"] = licencia["fecha"].date()
+    if "fecha_inicio" in licencia and isinstance(licencia["fecha_inicio"], datetime):
+        licencia["fecha_inicio"] = licencia["fecha_inicio"].date()
+    if "fecha_fin" in licencia and isinstance(licencia["fecha_fin"], datetime):
+        licencia["fecha_fin"] = licencia["fecha_fin"].date()
     return licencia
 
 
@@ -188,13 +196,9 @@ async def update_licencia(
             detail="Licencia no encontrada"
         )
     
-    # Verificar permisos: solo el padre propietario o un admin pueden actualizar
+    # Verificar permisos
     if current_user["role"] != UserRole.ADMIN:
-        nombre_padre = f"{current_user.get('nombre', '')} {current_user.get('apellido', '')}".strip()
-        if not nombre_padre:
-            nombre_padre = current_user["username"]
-        
-        if licencia["nombre_padre"] != nombre_padre:
+        if str(licencia.get("padre_id")) != str(current_user["_id"]):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tiene permisos para actualizar esta licencia"
@@ -211,13 +215,15 @@ async def update_licencia(
     update_data = licencia_data.model_dump(exclude_unset=True)
     
     if update_data:
-        # Convertir enums a strings si están presentes
-        if "tipo_permiso" in update_data:
-            update_data["tipo_permiso"] = update_data["tipo_permiso"].value if hasattr(update_data["tipo_permiso"], "value") else update_data["tipo_permiso"]
-        
-        # Convertir date a datetime para MongoDB si está presente
-        if "fecha" in update_data and isinstance(update_data["fecha"], date) and not isinstance(update_data["fecha"], datetime):
-            update_data["fecha"] = datetime.combine(update_data["fecha"], datetime.min.time())
+        # Convertir enums a strings
+        if "estado" in update_data and hasattr(update_data["estado"], "value"):
+            update_data["estado"] = update_data["estado"].value
+            
+        # Convertir date a datetime
+        if "fecha_inicio" in update_data and isinstance(update_data["fecha_inicio"], date) and not isinstance(update_data["fecha_inicio"], datetime):
+            update_data["fecha_inicio"] = datetime.combine(update_data["fecha_inicio"], datetime.min.time())
+        if "fecha_fin" in update_data and isinstance(update_data["fecha_fin"], date) and not isinstance(update_data["fecha_fin"], datetime):
+            update_data["fecha_fin"] = datetime.combine(update_data["fecha_fin"], datetime.min.time())
         
         update_data["updated_at"] = datetime.utcnow()
         await collection.update_one(
@@ -228,9 +234,10 @@ async def update_licencia(
     # Obtener y retornar la licencia actualizada
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
-    # Convertir fecha de datetime a date si es necesario
-    if "fecha" in updated_licencia and isinstance(updated_licencia["fecha"], datetime):
-        updated_licencia["fecha"] = updated_licencia["fecha"].date()
+    if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
+        updated_licencia["fecha_inicio"] = updated_licencia["fecha_inicio"].date()
+    if "fecha_fin" in updated_licencia and isinstance(updated_licencia["fecha_fin"], datetime):
+        updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia
 
@@ -259,13 +266,9 @@ async def delete_licencia(
             detail="Licencia no encontrada"
         )
     
-    # Verificar permisos: solo el padre propietario o un admin pueden eliminar
+    # Verificar permisos
     if current_user["role"] != UserRole.ADMIN:
-        nombre_padre = f"{current_user.get('nombre', '')} {current_user.get('apellido', '')}".strip()
-        if not nombre_padre:
-            nombre_padre = current_user["username"]
-        
-        if licencia["nombre_padre"] != nombre_padre:
+        if str(licencia.get("padre_id")) != str(current_user["_id"]):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tiene permisos para eliminar esta licencia"
@@ -301,18 +304,18 @@ async def aprobar_licencia(
             detail="Licencia no encontrada"
         )
     
-    # Actualizar el estado a ACEPTADA
+    # Actualizar el estado a APROBADA
     await collection.update_one(
         {"_id": ObjectId(licencia_id)},
-        {"$set": {"estado": "ACEPTADA", "updated_at": datetime.utcnow()}}
+        {"$set": {"estado": "APROBADA", "updated_at": datetime.utcnow()}}
     )
     
-    # Obtener y retornar la licencia actualizada
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
-    # Convertir fecha de datetime a date si es necesario
-    if "fecha" in updated_licencia and isinstance(updated_licencia["fecha"], datetime):
-        updated_licencia["fecha"] = updated_licencia["fecha"].date()
+    if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
+        updated_licencia["fecha_inicio"] = updated_licencia["fecha_inicio"].date()
+    if "fecha_fin" in updated_licencia and isinstance(updated_licencia["fecha_fin"], datetime):
+        updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia
 
@@ -347,11 +350,11 @@ async def rechazar_licencia(
         {"$set": {"estado": "RECHAZADA", "updated_at": datetime.utcnow()}}
     )
     
-    # Obtener y retornar la licencia actualizada
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
-    # Convertir fecha de datetime a date si es necesario
-    if "fecha" in updated_licencia and isinstance(updated_licencia["fecha"], datetime):
-        updated_licencia["fecha"] = updated_licencia["fecha"].date()
+    if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
+        updated_licencia["fecha_inicio"] = updated_licencia["fecha_inicio"].date()
+    if "fecha_fin" in updated_licencia and isinstance(updated_licencia["fecha_fin"], datetime):
+        updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia

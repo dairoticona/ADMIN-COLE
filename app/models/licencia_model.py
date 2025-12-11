@@ -1,83 +1,32 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Any
+from typing import Optional
 from datetime import datetime, date
 from bson import ObjectId
-from pydantic.json_schema import JsonSchemaValue
-from pydantic_core import core_schema
 from enum import Enum
-
-class PyObjectId(str):
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls, _source_type: Any, _handler: Any
-    ) -> core_schema.CoreSchema:
-        return core_schema.json_or_python_schema(
-            json_schema=core_schema.str_schema(),
-            python_schema=core_schema.union_schema([
-                core_schema.is_instance_schema(ObjectId),
-                core_schema.chain_schema([
-                    core_schema.str_schema(),
-                    core_schema.no_info_plain_validator_function(cls.validate),
-                ])
-            ]),
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda x: str(x)
-            ),
-        )
-
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
-    @classmethod
-    def __get_pydantic_json_schema__(
-        cls, _core_schema: core_schema.CoreSchema, handler: Any
-    ) -> JsonSchemaValue:
-        return handler(core_schema.str_schema())
-
-
-class TipoPermiso(str, Enum):
-    MEDICO = "MEDICO"
-    PERSONAL = "PERSONAL"
-    FAMILIAR = "FAMILIAR"
-    OTROS = "OTROS"
-
-
-class GradoEstudiante(str, Enum):
-    KINDER = "KINDER"
-    PRIMERO_PRIMARIA = "1RO_PRIMARIA"
-    SEGUNDO_PRIMARIA = "2DO_PRIMARIA"
-    TERCERO_PRIMARIA = "3RO_PRIMARIA"
-    CUARTO_PRIMARIA = "4TO_PRIMARIA"
-    QUINTO_PRIMARIA = "5TO_PRIMARIA"
-    SEXTO_PRIMARIA = "6TO_PRIMARIA"
-    PRIMERO_SECUNDARIA = "1RO_SECUNDARIA"
-    SEGUNDO_SECUNDARIA = "2DO_SECUNDARIA"
-    TERCERO_SECUNDARIA = "3RO_SECUNDARIA"
-    CUARTO_SECUNDARIA = "4TO_SECUNDARIA"
-    QUINTO_SECUNDARIA = "5TO_SECUNDARIA"
-    SEXTO_SECUNDARIA = "6TO_SECUNDARIA"
-
+from .common import PyObjectId
 
 class EstadoLicencia(str, Enum):
     PENDIENTE = "PENDIENTE"
-    ACEPTADA = "ACEPTADA"
+    APROBADA = "APROBADA" # Changed from ACEPTADA to match schema "Aprobada"
     RECHAZADA = "RECHAZADA"
-
 
 class LicenciaModel(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    hijo_id: str = Field(..., description="ID del hijo registrado")
-    nombre_estudiante: str = Field(..., description="Nombre del estudiante (auto-rellenado)")
-    nombre_padre: str = Field(..., description="Nombre del padre (auto-rellenado)")
-    tipo_permiso: TipoPermiso = Field(..., description="Tipo de permiso")
-    grado_estudiante: GradoEstudiante = Field(..., description="Grado del estudiante (auto-rellenado)")
-    fecha: date = Field(..., description="Fecha del permiso")
-    cantidad_dias: int = Field(..., ge=1, description="Cantidad de días del permiso")
-    motivo: str = Field(..., min_length=1, description="Motivo del permiso")
-    estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado de la licencia")
+    
+    # Solicitante
+    padre_id: PyObjectId = Field(..., description="ID del padre solicitante")
+    estudiante_id: PyObjectId = Field(..., description="ID del estudiante que faltará")
+    
+    # Detalle
+    fecha_inicio: date = Field(..., description="Fecha de inicio de la licencia")
+    fecha_fin: date = Field(..., description="Fecha de fin de la licencia")
+    motivo: str = Field(..., description="Motivo de la licencia")
+    adjunto: Optional[str] = Field(None, description="URL del certificado médico u otro adjunto")
+    
+    # Resolución
+    estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado de la solicitud")
+    respuesta_admin: Optional[str] = Field(None, description="Respuesta del colegio")
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -91,14 +40,11 @@ class LicenciaModel(BaseModel):
         },
         json_schema_extra={
             "example": {
-                "hijo_id": "507f1f77bcf86cd799439011",
-                "nombre_estudiante": "Juan Pérez",
-                "nombre_padre": "Carlos Pérez",
-                "tipo_permiso": "MEDICO",
-                "grado_estudiante": "3RO_PRIMARIA",
-                "fecha": "2025-12-15",
-                "cantidad_dias": 2,
-                "motivo": "Cita médica programada",
+                "padre_id": "507f1f77bcf86cd799439011",
+                "estudiante_id": "507f1f77bcf86cd799439022",
+                "fecha_inicio": "2025-05-20",
+                "fecha_fin": "2025-05-22",
+                "motivo": "Enfermedad",
                 "estado": "PENDIENTE"
             }
         }

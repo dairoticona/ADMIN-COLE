@@ -1,42 +1,34 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime, date
-
-from app.models.licencia_model import TipoPermiso, GradoEstudiante, EstadoLicencia
-
+from app.models.licencia_model import EstadoLicencia
+from app.models.common import PyObjectId
 
 class LicenciaBase(BaseModel):
-    tipo_permiso: TipoPermiso = Field(..., description="Tipo de permiso")
-    fecha: date = Field(..., description="Fecha del permiso")
-    cantidad_dias: int = Field(..., ge=1, description="Cantidad de días del permiso")
-    motivo: str = Field(..., min_length=1, description="Motivo del permiso")
-
+    padre_id: PyObjectId = Field(..., description="ID del padre solicitante")
+    estudiante_id: PyObjectId = Field(..., description="ID del estudiante que faltará")
+    fecha_inicio: date = Field(..., description="Fecha de inicio")
+    fecha_fin: date = Field(..., description="Fecha de fin")
+    motivo: str = Field(..., description="Motivo de la licencia")
+    adjunto: Optional[str] = Field(None, description="URL del adjunto")
+    estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado")
+    respuesta_admin: Optional[str] = Field(None, description="Respuesta del colegio")
 
 class LicenciaCreate(LicenciaBase):
-    """Schema para crear una nueva licencia (datos del estudiante y padre se auto-rellenan desde el hijo)"""
-    hijo_id: str = Field(..., description="ID del hijo registrado")
-
+    pass
 
 class LicenciaUpdate(BaseModel):
-    """Schema para actualizar una licencia (todos los campos son opcionales, hijo_id no se puede cambiar)"""
-    tipo_permiso: Optional[TipoPermiso] = Field(None, description="Tipo de permiso")
-    fecha: Optional[date] = Field(None, description="Fecha del permiso")
-    cantidad_dias: Optional[int] = Field(None, ge=1, description="Cantidad de días del permiso")
-    motivo: Optional[str] = Field(None, min_length=1, description="Motivo del permiso")
+    padre_id: Optional[PyObjectId] = Field(None, description="ID del padre")
+    estudiante_id: Optional[PyObjectId] = Field(None, description="ID del estudiante")
+    fecha_inicio: Optional[date] = Field(None, description="Fecha inicio")
+    fecha_fin: Optional[date] = Field(None, description="Fecha fin")
+    motivo: Optional[str] = Field(None, description="Motivo")
+    adjunto: Optional[str] = Field(None, description="Adjunto")
+    estado: Optional[EstadoLicencia] = Field(None, description="Estado")
+    respuesta_admin: Optional[str] = Field(None, description="Respuesta admin")
 
-
-class LicenciaResponse(BaseModel):
-    """Schema para respuesta de licencia"""
-    id: str = Field(..., alias="_id")
-    hijo_id: str = Field(..., description="ID del hijo registrado")
-    nombre_estudiante: str = Field(..., description="Nombre del estudiante")
-    nombre_padre: str = Field(..., description="Nombre del padre")
-    tipo_permiso: TipoPermiso = Field(..., description="Tipo de permiso")
-    grado_estudiante: GradoEstudiante = Field(..., description="Grado del estudiante")
-    fecha: date = Field(..., description="Fecha del permiso")
-    cantidad_dias: int = Field(..., ge=1, description="Cantidad de días del permiso")
-    motivo: str = Field(..., min_length=1, description="Motivo del permiso")
-    estado: EstadoLicencia = Field(..., description="Estado de la licencia")
+class LicenciaResponse(LicenciaBase):
+    id: PyObjectId = Field(..., alias="_id")
     created_at: datetime
     updated_at: datetime
 

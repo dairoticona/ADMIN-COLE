@@ -1,74 +1,49 @@
-from pydantic import BaseModel, Field, EmailStr, ConfigDict, GetJsonSchemaHandler
-from typing import Optional, Any
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
-from pydantic.json_schema import JsonSchemaValue
-from pydantic_core import core_schema
-
-class PyObjectId(str):
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls, _source_type: Any, _handler: Any
-    ) -> core_schema.CoreSchema:
-        return core_schema.json_or_python_schema(
-            json_schema=core_schema.str_schema(),
-            python_schema=core_schema.union_schema([
-                core_schema.is_instance_schema(ObjectId),
-                core_schema.chain_schema([
-                    core_schema.str_schema(),
-                    core_schema.no_info_plain_validator_function(cls.validate),
-                ])
-            ]),
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda x: str(x)
-            ),
-        )
-
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
-    @classmethod
-    def __get_pydantic_json_schema__(
-        cls, _core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
-    ) -> JsonSchemaValue:
-        return handler(core_schema.str_schema())
-
-
 from enum import Enum
+from .common import PyObjectId
 
 class UserRole(str, Enum):
     ADMIN = "ADMIN"
     PADRE = "PADRE"
+    SECRETARIA = "SECRETARIA"
 
 class UserModel(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    email: EmailStr
-    username: str
-    nombre: Optional[str] = ""
-    apellido: Optional[str] = ""
-    role: Optional[UserRole] = None
-    hashed_password: str
+    
+    # Credenciales
+    email: EmailStr = Field(..., description="Correo electrónico (login)")
+    hashed_password: str = Field(..., description="Contraseña encriptada")
+    role: UserRole = Field(..., description="Rol del usuario")
+    
+    # Datos Personales
+    nombre: str = Field(..., description="Nombres") # Mantengo separado para flexibilidad aunque schema diga Completo
+    apellido: str = Field(..., description="Apellidos")
+
+    telefono: Optional[str] = Field(None, description="Teléfono o celular")
+    direccion: Optional[str] = Field(None, description="Domicilio")
+    
+    # Referencias (Solo para Padres)
+    hijos_ids: List[PyObjectId] = Field(default=[], description="Lista de IDs de sus hijos (Estudiantes)")
+
     is_active: bool = True
-    is_superuser: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str},
+        json_encoders={ObjectId: str, datetime: lambda v: v.isoformat()},
         json_schema_extra={
             "example": {
-                "email": "user@example.com",
-                "username": "johndoe",
-                "nombre": "John",
-                "apellido": "Doe",
+                "email": "padre@example.com",
                 "role": "PADRE",
-                "is_active": True,
-                "is_superuser": False
+                "nombre": "Juan",
+                "apellido": "Pérez",
+                "telefono": "77712345",
+                "hijos_ids": ["507f1f77bcf86cd799439011"]
             }
         }
     )

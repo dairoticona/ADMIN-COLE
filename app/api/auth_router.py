@@ -64,19 +64,25 @@ async def register(user_data: PadreRegisterRequest):
     # Check if user exists
     existing_user = await collection.find_one({
         "$or": [
-            {"email": user_data.email},
-            {"username": user_data.username}
+            {"email": user_data.email}
         ]
     })
     
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuario con este email o username ya existe"
+            detail="Usuario con este email ya existe"
         )
     
     # Create user document
     user_dict = user_data.model_dump(exclude={"password"})
+    
+    # Auto-generate username from email if not provided (Padres login with email usually, but system needs username)
+    # We can use the part before @, but collisions.
+    # We can just require username in schema OR effectively set username = email.
+    # Let's set username = email to ensure uniqueness easily.
+    user_dict["username"] = user_data.email
+    
     user_dict["hashed_password"] = get_password_hash(user_data.password)
     user_dict["role"] = "PADRE"  # Asignar rol explícitamente
     user_dict["created_at"] = datetime.utcnow()
@@ -98,7 +104,12 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     db = get_database()
     collection = db["users"]
     
-    user = await collection.find_one({"username": form_data.username})
+    user = await collection.find_one({
+        "$or": [
+            {"username": form_data.username},
+            {"email": form_data.username}
+        ]
+    })
     
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
