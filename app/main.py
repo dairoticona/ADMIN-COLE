@@ -11,6 +11,7 @@ from app.api.eventos_router import router as eventos_router
 from app.api.libretas_router import router as libretas_router
 from app.api.mallas_router import router as mallas_router
 from app.api.pagos_router import router as pagos_router
+from app.api.users_router import router as users_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
