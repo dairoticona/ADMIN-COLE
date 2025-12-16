@@ -1,5 +1,7 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File, status
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query
+import math
+from app.schemas.common import PaginatedResponse
 from app.crud.crud_estudiante import estudiante as crud_estudiante
 from app.schemas.estudiante_schema import EstudianteCreate, EstudianteUpdate, EstudianteResponse
 from app.core.database import get_database
@@ -113,10 +115,24 @@ async def bulk_delete_estudiantes(file: UploadFile = File(...)):
         "errores": errores
     }
 
-@router.get("/", response_model=List[EstudianteResponse])
-async def read_estudiantes(skip: int = 0, limit: int = 100):
+@router.get("/", response_model=PaginatedResponse[EstudianteResponse])
+async def read_estudiantes(
+    page: int = Query(1, ge=1, description="Número de página"),
+    per_page: int = Query(10, ge=1, le=100, description="Registros por página"),
+    q: Optional[str] = Query(None, description="Filtro de búsqueda")
+):
     db = get_database()
-    return await crud_estudiante.get_multi(db, skip=skip, limit=limit)
+    items, total = await crud_estudiante.get_multi_paginated(db, page=page, per_page=per_page, q=q)
+    
+    total_pages = math.ceil(total / per_page) if per_page > 0 else 0
+    
+    return {
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "data": items
+    }
 
 @router.post("/", response_model=EstudianteResponse)
 async def create_estudiante(estudiante_in: EstudianteCreate):
