@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query
 import math
 from app.schemas.common import PaginatedResponse
 from app.crud.crud_estudiante import estudiante as crud_estudiante
-from app.schemas.estudiante_schema import EstudianteCreate, EstudianteUpdate, EstudianteResponse
+from app.schemas.estudiante_schema import EstudianteCreate, EstudianteUpdate, EstudianteResponse, GradoFilter
+from app.models.malla_curricular_model import NivelEducativo
+from app.models.curso_model import TurnoCurso
 from app.core.database import get_database
 import openpyxl
 from io import BytesIO
@@ -119,10 +121,23 @@ async def bulk_delete_estudiantes(file: UploadFile = File(...)):
 async def read_estudiantes(
     page: int = Query(1, ge=1, description="Número de página"),
     per_page: int = Query(10, ge=1, le=100, description="Registros por página"),
-    q: Optional[str] = Query(None, description="Filtro de búsqueda")
+    q: Optional[str] = Query(None, description="Filtro de búsqueda"),
+    nivel: Optional[NivelEducativo] = Query(None, description="Filtro por Nivel Educativo"),
+    grado: Optional[GradoFilter] = Query(None, description="Filtro por Grado"),
+    turno: Optional[TurnoCurso] = Query(None, description="Filtro por Turno"),
+    paralelo: Optional[str] = Query(None, description="Filtro por Paralelo (A, B, etc)")
 ):
     db = get_database()
-    items, total = await crud_estudiante.get_multi_paginated(db, page=page, per_page=per_page, q=q)
+    items, total = await crud_estudiante.get_multi_paginated(
+        db, 
+        page=page, 
+        per_page=per_page, 
+        q=q,
+        nivel=nivel,
+        grado=grado,
+        turno=turno,
+        paralelo=paralelo
+    )
     
     total_pages = math.ceil(total / per_page) if per_page > 0 else 0
     

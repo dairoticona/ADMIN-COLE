@@ -3,6 +3,17 @@ from typing import Optional
 from datetime import datetime
 from app.models.estudiante_model import EstadoEstudiante
 from app.models.common import PyObjectId
+from enum import Enum
+
+class GradoFilter(str, Enum):
+    PRE_KINDER = "PRE_KINDER"
+    KINDER = "KINDER"
+    PRIMERO = "PRIMERO"
+    SEGUNDO = "SEGUNDO"
+    TERCERO = "TERCERO"
+    CUARTO = "CUARTO"
+    QUINTO = "QUINTO"
+    SEXTO = "SEXTO"
 
 class EstudianteBase(BaseModel):
     rude: int = Field(..., description="Código RUDE único del estudiante")

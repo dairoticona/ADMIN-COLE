@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from typing import List, Optional, Any
+import math
+from app.crud.crud_licencia import licencia as crud_licencia
+from app.schemas.common import PaginatedResponse
 from datetime import datetime, date
 from bson import ObjectId
 
@@ -93,39 +96,58 @@ async def create_licencia(
     return licencia_dict
 
 
-@router.get("/", response_model=List[LicenciaResponse])
-async def list_licencias(current_user: dict = Depends(get_current_user)):
+@router.get("/", response_model=PaginatedResponse[LicenciaResponse])
+async def list_licencias(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+    q: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Listar licencias:
+    Listar licencias paginadas:
     - Administradores ven todas las licencias
     - Padres solo ven sus propias licencias
     """
     db = get_database()
-    collection = db["licencias"]
     
     # Construir el filtro según el rol del usuario
-    if current_user["role"] == UserRole.ADMIN:
-        # Los administradores ven todas las licencias
-        filter_query = {}
-    else:
+    filter_query = {}
+    if current_user["role"] != UserRole.ADMIN:
         # Los padres solo ven sus propias licencias (filtrar por padre_id)
         # Asegurarse de usar el ObjectId correcto
         filter_query = {"padre_id": ObjectId(current_user["_id"]) if isinstance(current_user["_id"], str) else current_user["_id"]}
-        # Nota: Si en la DB se guardó como string, esto fallaría. 
-        # Pero insertamos usando ObjectId si viene del modelo, o string si pydantic.
-        # LicenciaModel define padre_id como PyObjectId, asi que en mongo es ObjectId.
     
-    licencias = await collection.find(filter_query).to_list(length=None)
+    items, total = await crud_licencia.get_paginated(
+        db, 
+        page=page, 
+        per_page=per_page, 
+        q=q, 
+        filters=filter_query
+    )
     
     # Convertir ObjectId a string y fechas a date
-    for licencia in licencias:
-        licencia["_id"] = str(licencia["_id"])
-        if "fecha_inicio" in licencia and isinstance(licencia["fecha_inicio"], datetime):
-            licencia["fecha_inicio"] = licencia["fecha_inicio"].date()
-        if "fecha_fin" in licencia and isinstance(licencia["fecha_fin"], datetime):
-            licencia["fecha_fin"] = licencia["fecha_fin"].date()
+    processed_items = []
+    for licencia in items:
+        # Pydantic model dump to dict to manipulate fields if needed, 
+        # but since we return PaginatedResponse[LicenciaResponse], Pydantic should handle validation if we pass objects.
+        # However, our CRUD returns LicenciaModel objects. 
+        # If we need exact same processing as before (converting ObjectId to str for response):
+        # The Response Model handles serialization of ObjectId -> str usually if configured.
+        # Check LicenciaResponse/Model config.
+        # But previous code did manual conversion. Let's rely on Pydantic's from_attributes or just pass models.
+        # Our BaseModels have json_encoders for ObjectId.
+        processed_items.append(licencia)
     
-    return licencias
+    # Calcular total de páginas
+    total_pages = math.ceil(total / per_page) if per_page > 0 else 0
+    
+    return {
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "data": processed_items
+    }
 
 
 @router.get("/{licencia_id}", response_model=LicenciaResponse)

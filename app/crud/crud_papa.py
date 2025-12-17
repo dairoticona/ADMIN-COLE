@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, List, Tuple
 from app.crud.base import CRUDBase
 from app.models.papa_model import PapaModel
 from app.schemas.papa_schema import PapaCreate, PapaUpdate
@@ -34,6 +34,44 @@ class CRUDPapa(CRUDBase[PapaModel, PapaCreate, PapaUpdate]):
         
         obj_in_data["_id"] = result.inserted_id
         return self.model(**obj_in_data)
+
+    async def get_paginated(
+        self, 
+        db: Any, 
+        page: int = 1, 
+        per_page: int = 10, 
+        q: Optional[str] = None
+    ) -> Tuple[List[PapaModel], int]:
+        collection = db[self.collection_name]
+        
+        # Base filter: Must be PADRE
+        filter_query = {"role": "PADRE"}
+        
+        # 1. Aplicar Filtros (Búsqueda insensible a mayúsculas)
+        if q:
+            regex = {"$regex": q, "$options": "i"}
+            or_conditions = [
+                {"nombre": regex},
+                {"apellido": regex},
+                {"email": regex},
+                {"telefono": regex}
+            ]
+            
+            # Combine base filter with OR conditions
+            filter_query["$or"] = or_conditions
+
+        # 2. Obtener Total (CRÍTICO para calcular páginas)
+        total_count = await collection.count_documents(filter_query)
+        
+        # 3. Aplicar Paginación (Skip & Limit)
+        skip = (page - 1) * per_page
+        cursor = collection.find(filter_query).skip(skip).limit(per_page).sort("created_at", -1)
+        
+        results = []
+        async for doc in cursor:
+            results.append(self.model(**doc))
+            
+        return results, total_count
 
 # Instance pointing to "users" collection
 papa = CRUDPapa(PapaModel, "users")

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, status
-from typing import List
+from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query
+from typing import List, Optional
+import math
 from app.crud.crud_papa import papa as crud_papa
 from app.schemas.papa_schema import PapaCreate, PapaUpdate, PapaResponse
+from app.schemas.common import PaginatedResponse
 from app.models.common import UserRole
 from app.core.database import get_database
 from app.core.security import get_password_hash
@@ -116,16 +118,26 @@ async def bulk_delete_padres(file: UploadFile = File(...)):
 
 # --- Papas CRUD ---
 
-@router.get("/", response_model=List[PapaResponse])
-async def read_papas_list(skip: int = 0, limit: int = 100):
-    """Listar todos los padres (Role = PADRE)"""
+@router.get("/", response_model=PaginatedResponse[PapaResponse])
+async def read_papas_list(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+    q: Optional[str] = None
+):
+    """Listar todos los padres (Role = PADRE) con paginación y búsqueda"""
     db = get_database()
-    collection = db["users"]
-    cursor = collection.find({"role": UserRole.PADRE}).skip(skip).limit(limit).sort("created_at", -1)
-    results = []
-    async for doc in cursor:
-        results.append(PapaResponse(**doc, id=doc["_id"]))
-    return results
+    items, total = await crud_papa.get_paginated(db, page=page, per_page=per_page, q=q)
+    
+    # Calcular total de páginas
+    total_pages = math.ceil(total / per_page) if per_page > 0 else 0
+    
+    return {
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "data": items
+    }
 
 @router.post("/", response_model=PapaResponse, status_code=status.HTTP_201_CREATED)
 async def create_papa(user_in: PapaCreate):
