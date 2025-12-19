@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query, Body
 from typing import List, Optional
 import math
 from app.crud.crud_papa import papa as crud_papa
@@ -10,6 +10,10 @@ from app.core.security import get_password_hash
 import openpyxl
 from io import BytesIO
 from bson import ObjectId
+
+from app.models.malla_curricular_model import NivelEducativo
+from app.models.curso_model import TurnoCurso
+from app.schemas.estudiante_schema import GradoFilter
 
 router = APIRouter()
 
@@ -122,11 +126,24 @@ async def bulk_delete_padres(file: UploadFile = File(...)):
 async def read_papas_list(
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
-    q: Optional[str] = None
+    q: Optional[str] = None,
+    nivel: Optional[NivelEducativo] = Query(None, description="Filtro por Nivel Educativo"),
+    grado: Optional[GradoFilter] = Query(None, description="Filtro por Grado"),
+    turno: Optional[TurnoCurso] = Query(None, description="Filtro por Turno"),
+    paralelo: Optional[str] = Query(None, description="Filtro por Paralelo (A, B)")
 ):
     """Listar todos los padres (Role = PADRE) con paginación y búsqueda"""
     db = get_database()
-    items, total = await crud_papa.get_paginated(db, page=page, per_page=per_page, q=q)
+    items, total = await crud_papa.get_paginated(
+        db, 
+        page=page, 
+        per_page=per_page, 
+        q=q,
+        nivel=nivel,
+        grado=grado,
+        turno=turno,
+        paralelo=paralelo
+    )
     
     # Calcular total de páginas
     total_pages = math.ceil(total / per_page) if per_page > 0 else 0
@@ -190,3 +207,19 @@ async def delete_papa(id: str):
         raise HTTPException(status_code=404, detail="Padre no encontrado")
     
     return await crud_papa.remove(db, id=id)
+
+@router.post("/{id}/hijos", response_model=PapaResponse)
+async def assign_child(id: str, child_id: str = Body(..., embed=True)):
+    """
+    Asignar un hijo a un padre (sin borrar los anteriores).
+    Body: {"child_id": "..."}
+    """
+    db = get_database()
+    
+    # Verificar que el padre existe
+    user = await crud_papa.get(db, id=id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Padre no encontrado")
+        
+    updated_papa = await crud_papa.add_child(db, papa_id=id, child_id=child_id)
+    return updated_papa

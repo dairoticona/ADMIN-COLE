@@ -26,6 +26,10 @@ class PapaModel(BaseModel):
     telefono: Optional[str] = Field(None, description="Teléfono o celular")
     direccion: Optional[str] = Field(None, description="Domicilio")
     
+    # Referencias
+    numero_referencia: Optional[str] = Field(None, description="Teléfono de referencia")
+    nombre_referencia: Optional[str] = Field(None, description="Nombre de la persona de referencia")
+    
     # Referencias (Papas tienen hijos)
     hijos_ids: List[PyObjectId] = Field(default=[], description="Lista de IDs de sus hijos (Estudiantes)")
 

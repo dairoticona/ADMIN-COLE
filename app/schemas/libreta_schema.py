@@ -1,28 +1,29 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
-from app.models.libreta_model import EstadoLibreta, DatosInstitucionales, ContenidoMateria
+from app.models.libreta_model import EstadoDocumento
 from app.models.common import PyObjectId
 
 class LibretaBase(BaseModel):
     estudiante_id: PyObjectId = Field(..., description="ID del estudiante")
     gestion: int = Field(..., description="Ej: 2024")
-    datos_institucionales: DatosInstitucionales = Field(..., description="Datos del colegio")
-    contenido_academico: List[ContenidoMateria] = Field(..., description="Lista de materias y notas")
-    estado_final: EstadoLibreta = Field(default=EstadoLibreta.PENDIENTE)
+    titulo: Optional[str] = Field(None, description="Título del documento")
+    estado_documento: EstadoDocumento = Field(default=EstadoDocumento.BORRADOR)
 
 class LibretaCreate(LibretaBase):
+    # En el POST, el archivo se maneja aparte por UploadFile, 
+    # pero este schema valida los campos de texto si se usan como JSON (aunque usaremos Form).
     pass
 
 class LibretaUpdate(BaseModel):
-    estudiante_id: Optional[PyObjectId] = Field(None, description="ID del estudiante")
-    gestion: Optional[int] = Field(None, description="Gestión")
-    datos_institucionales: Optional[DatosInstitucionales] = Field(None, description="Datos institucionales")
-    contenido_academico: Optional[List[ContenidoMateria]] = Field(None, description="Contenido académico")
-    estado_final: Optional[EstadoLibreta] = Field(None, description="Estado final")
+    estudiante_id: Optional[PyObjectId] = Field(None)
+    gestion: Optional[int] = Field(None)
+    titulo: Optional[str] = Field(None)
+    estado_documento: Optional[EstadoDocumento] = Field(None)
 
 class LibretaResponse(LibretaBase):
     id: PyObjectId = Field(..., alias="_id")
+    archivo_path: str = Field(..., description="Ruta relativa del archivo")
     created_at: datetime
     updated_at: datetime
 

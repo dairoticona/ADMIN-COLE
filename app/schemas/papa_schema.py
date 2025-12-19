@@ -11,6 +11,8 @@ class PapaBase(BaseModel):
     apellido: Optional[str] = None
     telefono: Optional[str] = None
     direccion: Optional[str] = None
+    numero_referencia: Optional[str] = None
+    nombre_referencia: Optional[str] = None
     hijos_ids: Optional[List[PyObjectId]] = Field(default=[], description="Lista de IDs de sus hijos")
     is_active: bool = True
 
@@ -30,6 +32,8 @@ class PapaUpdate(BaseModel):
     apellido: Optional[str] = None
     telefono: Optional[str] = None
     direccion: Optional[str] = None
+    numero_referencia: Optional[str] = None
+    nombre_referencia: Optional[str] = None
     hijos_ids: Optional[List[PyObjectId]] = None
     is_active: Optional[bool] = None
 
