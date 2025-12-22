@@ -5,15 +5,6 @@ from app.models.common import PyObjectId, UserRole
 
 # --- Schemas ---
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: dict # Retorna el usuario completo
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
 # Generic User Response used by Auth (/me) and Admin (listing users)
 class AuthUserResponse(BaseModel):
     id: PyObjectId = Field(..., alias="_id")
@@ -21,6 +12,7 @@ class AuthUserResponse(BaseModel):
     role: UserRole
     nombre: str
     apellido: str
+    username: Optional[str] = None 
     is_active: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -34,3 +26,12 @@ class AuthUserResponse(BaseModel):
         populate_by_name=True,
         json_encoders={datetime: lambda v: v.isoformat()}
     )
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: AuthUserResponse # Update to use proper schema for serialization
+    
+class LoginRequest(BaseModel):
+    username: str
+    password: str
