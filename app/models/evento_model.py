@@ -9,6 +9,7 @@ class EventoModel(BaseModel):
     titulo: str = Field(..., description="Título del evento")
     descripcion: str = Field(..., description="Descripción detallada")
     fecha_hora: datetime = Field(..., description="Fecha y hora del evento")
+    hora_conclusion: Optional[datetime] = Field(None, description="Hora de conclusión del evento")
     
     # Destinatarios
     es_global: bool = Field(False, description="Si es True, visible para todos")

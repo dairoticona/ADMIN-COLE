@@ -168,7 +168,6 @@ async def get_mis_hijos(
               o dejar vacío para ver todos los estudiantes
     Incluye información del curso de cada estudiante.
     """
-    print(f"DEBUG: Endpoint /mis-hijos llamado. padre_id={padre_id}, user_role={current_user.get('role')}")
     db = get_database()
     
     # Si es admin
@@ -182,16 +181,11 @@ async def get_mis_hijos(
                 )
             
             # Buscar el padre
-            print(f"DEBUG: Buscando padre con ID: {padre_id}")
-            print(f"DEBUG: ObjectId convertido: {ObjectId(padre_id)}")
             padre = await db["users"].find_one({"_id": ObjectId(padre_id)})
-            print(f"DEBUG: Padre encontrado: {padre}")
             
             if not padre:
                 # Intentar buscar sin importar el tipo de ID
-                print(f"DEBUG: Intentando buscar como string...")
                 padre = await db["users"].find_one({"_id": padre_id})
-                print(f"DEBUG: Resultado búsqueda string: {padre}")
                 
             if not padre:
                 raise HTTPException(
@@ -200,7 +194,6 @@ async def get_mis_hijos(
                 )
             
             # Verificar que sea un padre
-            print(f"DEBUG: Role del usuario: {padre.get('role')}")
             if padre.get("role") != UserRole.PADRE and padre.get("role") != "PADRE":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

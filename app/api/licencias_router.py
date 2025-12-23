@@ -19,15 +19,42 @@ async def create_licencia(
     licencia_data: LicenciaCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Crear una nueva licencia (solo padres pueden crear licencias)"""
-    # Verificar que el usuario sea un padre
-    if current_user["role"] != UserRole.PADRE:
+    """Crear una nueva licencia (padres y administradores)"""
+    db = get_database()
+    
+    # Determinar padre_id según el rol
+    if current_user["role"] == UserRole.PADRE:
+        # Padres: auto-asignar su propio ID
+        padre_id = current_user["_id"]
+        
+        # Verificar que el estudiante pertenezca al padre
+        user_hijos_ids = [str(uid) for uid in current_user.get("hijos_ids", [])]
+        if str(licencia_data.estudiante_id) not in user_hijos_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tiene permisos para crear licencias para este estudiante"
+            )
+    elif current_user["role"] == UserRole.ADMIN:
+        # Admins: deben proporcionar padre_id
+        if not licencia_data.padre_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Los administradores deben especificar el padre_id"
+            )
+        padre_id = licencia_data.padre_id
+        
+        # Verificar que el padre existe
+        padre = await db["users"].find_one({"_id": ObjectId(padre_id) if isinstance(padre_id, str) else padre_id})
+        if not padre or padre.get("role") != "PADRE":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Padre no encontrado"
+            )
+    else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los padres pueden crear licencias"
+            detail="No tiene permisos para crear licencias"
         )
-    
-    db = get_database()
     
     # Validar que el estudiante_id sea válido
     if not ObjectId.is_valid(licencia_data.estudiante_id):
@@ -36,40 +63,28 @@ async def create_licencia(
             detail="ID de estudiante inválido"
         )
     
-    # Verificar que el estudiante existe en la colección 'estudiantes'
+    # Verificar que el estudiante existe
     estudiantes_collection = db["estudiantes"]
     estudiante = await estudiantes_collection.find_one({"_id": ObjectId(licencia_data.estudiante_id)})
-    
-    print(f"DEBUG: Buscando estudiante con ID: {licencia_data.estudiante_id}")
     if not estudiante:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Estudiante con ID {licencia_data.estudiante_id} no encontrado"
         )
     
-    # Verificar que el estudiante pertenezca al padre autenticado (usando hijos_ids del usuario)
-    # Nota: current_user["hijos_ids"] es una lista de IDs (pueden ser ObjectId o str)
-    user_hijos_ids = [str(uid) for uid in current_user.get("hijos_ids", [])]
-    if str(estudiante["_id"]) not in user_hijos_ids:
-        # Fallback por si la relación no está sincronizada en User, verificamos por lógica de negocio
-        # Pero si 'padres_ids' fue eliminado de Estudiante, dependemos de User.hijos_ids.
-        # Asumimos que user_hijos_ids es la fuente de verdad.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tiene permisos para crear licencias para este estudiante"
-        )
-    
     licencias_collection = db["licencias"]
     
     # Crear el documento de licencia
-    licencia_dict = licencia_data.model_dump()
+    licencia_dict = licencia_data.model_dump(exclude={"padre_id"})
     
-    # Auto-rellenar el padre_id con el usuario actual si no coincide (forzar autoría)
-    licencia_dict["padre_id"] = current_user["_id"]
+    # Asignar el padre_id determinado
+    licencia_dict["padre_id"] = ObjectId(padre_id) if isinstance(padre_id, str) else padre_id
     
     # Convertir enums a strings
     if "estado" in licencia_dict and hasattr(licencia_dict["estado"], "value"):
         licencia_dict["estado"] = licencia_dict["estado"].value
+    if "tipo_permiso" in licencia_dict and hasattr(licencia_dict["tipo_permiso"], "value"):
+        licencia_dict["tipo_permiso"] = licencia_dict["tipo_permiso"].value
         
     # Convertir date a datetime para MongoDB
     if isinstance(licencia_dict["fecha_inicio"], date) and not isinstance(licencia_dict["fecha_inicio"], datetime):
@@ -87,6 +102,7 @@ async def create_licencia(
     
     # Retornar la licencia creada
     licencia_dict["_id"] = str(result.inserted_id)
+    licencia_dict["padre_id"] = str(licencia_dict["padre_id"])
     # Convertir fechas de vuelta a date para la respuesta
     if isinstance(licencia_dict["fecha_inicio"], datetime):
         licencia_dict["fecha_inicio"] = licencia_dict["fecha_inicio"].date()
@@ -241,6 +257,8 @@ async def update_licencia(
         # Convertir enums a strings
         if "estado" in update_data and hasattr(update_data["estado"], "value"):
             update_data["estado"] = update_data["estado"].value
+        if "tipo_permiso" in update_data and hasattr(update_data["tipo_permiso"], "value"):
+            update_data["tipo_permiso"] = update_data["tipo_permiso"].value
             
         # Convertir date a datetime
         if "fecha_inicio" in update_data and isinstance(update_data["fecha_inicio"], date) and not isinstance(update_data["fecha_inicio"], datetime):

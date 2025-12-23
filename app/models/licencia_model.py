@@ -10,6 +10,11 @@ class EstadoLicencia(str, Enum):
     APROBADA = "APROBADA" # Changed from ACEPTADA to match schema "Aprobada"
     RECHAZADA = "RECHAZADA"
 
+class TipoPermiso(str, Enum):
+    PERSONAL = "PERSONAL"
+    MEDICO = "MEDICO"
+    FAMILIAR = "FAMILIAR"
+
 class LicenciaModel(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     
@@ -18,10 +23,11 @@ class LicenciaModel(BaseModel):
     estudiante_id: PyObjectId = Field(..., description="ID del estudiante que faltará")
     
     # Detalle
+    tipo_permiso: TipoPermiso = Field(..., description="Tipo de permiso solicitado")
     fecha_inicio: date = Field(..., description="Fecha de inicio de la licencia")
     fecha_fin: date = Field(..., description="Fecha de fin de la licencia")
-    motivo: str = Field(..., description="Motivo de la licencia")
-    adjunto: Optional[str] = Field(None, description="URL del certificado médico u otro adjunto")
+    motivo: Optional[str] = Field(None, description="Motivo de la licencia (obligatorio para MEDICO y FAMILIAR)")
+    adjunto: Optional[str] = Field(None, description="URL del certificado médico u otro adjunto (obligatorio para MEDICO y FAMILIAR)")
     
     # Resolución
     estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado de la solicitud")
