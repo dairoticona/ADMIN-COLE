@@ -43,3 +43,22 @@ class EstudianteResponse(EstudianteBase):
             datetime: lambda v: v.isoformat()
         }
     )
+
+class CursoInfo(BaseModel):
+    """Información básica del curso"""
+    nombre: str
+    nivel: str
+    turno: str
+    paralelo: str
+
+class HijoSimpleResponse(BaseModel):
+    """Respuesta simplificada para ver hijos de un padre"""
+    id: PyObjectId = Field(..., alias="_id")
+    nombres: str
+    apellidos: str
+    curso: Optional[CursoInfo] = None
+    
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
+

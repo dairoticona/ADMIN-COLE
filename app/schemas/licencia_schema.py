@@ -5,30 +5,31 @@ from app.models.licencia_model import EstadoLicencia
 from app.models.common import PyObjectId
 
 class LicenciaBase(BaseModel):
-    padre_id: PyObjectId = Field(..., description="ID del padre solicitante")
     estudiante_id: PyObjectId = Field(..., description="ID del estudiante que faltará")
     fecha_inicio: date = Field(..., description="Fecha de inicio")
     fecha_fin: date = Field(..., description="Fecha de fin")
     motivo: str = Field(..., description="Motivo de la licencia")
     adjunto: Optional[str] = Field(None, description="URL del adjunto")
-    estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado")
-    respuesta_admin: Optional[str] = Field(None, description="Respuesta del colegio")
 
 class LicenciaCreate(LicenciaBase):
     pass
 
 class LicenciaUpdate(BaseModel):
-    padre_id: Optional[PyObjectId] = Field(None, description="ID del padre")
+    # padre_id no debería ser actualizable
     estudiante_id: Optional[PyObjectId] = Field(None, description="ID del estudiante")
     fecha_inicio: Optional[date] = Field(None, description="Fecha inicio")
     fecha_fin: Optional[date] = Field(None, description="Fecha fin")
     motivo: Optional[str] = Field(None, description="Motivo")
     adjunto: Optional[str] = Field(None, description="Adjunto")
-    estado: Optional[EstadoLicencia] = Field(None, description="Estado")
-    respuesta_admin: Optional[str] = Field(None, description="Respuesta admin")
+    # Estado y Respuesta (Opcionales para que Admin pueda actualizarlos)
+    estado: Optional[EstadoLicencia] = Field(None, description="Estado (Solo Admin)")
+    respuesta_admin: Optional[str] = Field(None, description="Respuesta del colegio (Solo Admin)")
 
 class LicenciaResponse(LicenciaBase):
     id: PyObjectId = Field(..., alias="_id")
+    padre_id: PyObjectId = Field(..., description="ID del padre solicitante")
+    estado: EstadoLicencia = Field(default=EstadoLicencia.PENDIENTE, description="Estado")
+    respuesta_admin: Optional[str] = Field(None, description="Respuesta del colegio")
     created_at: datetime
     updated_at: datetime
 

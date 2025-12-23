@@ -1,15 +1,17 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, status, Query, Depends
 import math
 from app.schemas.common import PaginatedResponse
 from app.crud.crud_estudiante import estudiante as crud_estudiante
-from app.schemas.estudiante_schema import EstudianteCreate, EstudianteUpdate, EstudianteResponse, GradoFilter
+from app.schemas.estudiante_schema import EstudianteCreate, EstudianteUpdate, EstudianteResponse, GradoFilter, HijoSimpleResponse
 from app.models.malla_curricular_model import NivelEducativo
 from app.models.curso_model import TurnoCurso
 from app.core.database import get_database
 import openpyxl
 from io import BytesIO
 from bson import ObjectId
+from app.models.common import UserRole
+from app.api.auth_router import get_current_user
 
 router = APIRouter()
 
@@ -154,6 +156,103 @@ async def create_estudiante(estudiante_in: EstudianteCreate):
     db = get_database()
     return await crud_estudiante.create(db, obj_in=estudiante_in)
 
+@router.get("/mis-hijos", response_model=List[HijoSimpleResponse])
+async def get_mis_hijos(
+    padre_id: Optional[str] = Query(None, description="ID del padre (solo para admins)"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Obtener lista de hijos de un padre.
+    - Padres: ven solo sus propios hijos (padre_id se ignora)
+    - Admins: pueden especificar padre_id para ver hijos de un padre específico, 
+              o dejar vacío para ver todos los estudiantes
+    Incluye información del curso de cada estudiante.
+    """
+    print(f"DEBUG: Endpoint /mis-hijos llamado. padre_id={padre_id}, user_role={current_user.get('role')}")
+    db = get_database()
+    
+    # Si es admin
+    if current_user["role"] == UserRole.ADMIN:
+        if padre_id:
+            # Admin quiere ver hijos de un padre específico
+            if not ObjectId.is_valid(padre_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="ID de padre inválido"
+                )
+            
+            # Buscar el padre
+            print(f"DEBUG: Buscando padre con ID: {padre_id}")
+            print(f"DEBUG: ObjectId convertido: {ObjectId(padre_id)}")
+            padre = await db["users"].find_one({"_id": ObjectId(padre_id)})
+            print(f"DEBUG: Padre encontrado: {padre}")
+            
+            if not padre:
+                # Intentar buscar sin importar el tipo de ID
+                print(f"DEBUG: Intentando buscar como string...")
+                padre = await db["users"].find_one({"_id": padre_id})
+                print(f"DEBUG: Resultado búsqueda string: {padre}")
+                
+            if not padre:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Padre no encontrado con ID: {padre_id}"
+                )
+            
+            # Verificar que sea un padre
+            print(f"DEBUG: Role del usuario: {padre.get('role')}")
+            if padre.get("role") != UserRole.PADRE and padre.get("role") != "PADRE":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El usuario especificado no es un padre. Role: {padre.get('role')}"
+                )
+            
+            hijos_ids = padre.get("hijos_ids", [])
+            if not hijos_ids:
+                return []
+            
+            # Convertir IDs a ObjectId si son strings
+            object_ids = [ObjectId(hid) if isinstance(hid, str) else hid for hid in hijos_ids]
+            estudiantes = await db["estudiantes"].find({"_id": {"$in": object_ids}}).to_list(100)
+        else:
+            # Admin sin padre_id: ver todos los estudiantes
+            estudiantes = await db["estudiantes"].find({}).to_list(1000)
+    else:
+        # Padres solo ven sus propios hijos (ignorar padre_id)
+        hijos_ids = current_user.get("hijos_ids", [])
+        if not hijos_ids:
+            return []
+            
+        # Convertir IDs a ObjectId si son strings
+        object_ids = [ObjectId(hid) if isinstance(hid, str) else hid for hid in hijos_ids]
+        
+        # Buscar estudiantes
+        estudiantes = await db["estudiantes"].find({"_id": {"$in": object_ids}}).to_list(100)
+    
+    # Simplificar respuesta
+    results = []
+    for est in estudiantes:
+        hijo_data = {
+            "_id": est["_id"],
+            "nombres": est.get("nombres", ""),
+            "apellidos": est.get("apellidos", "")
+        }
+        
+        # Si el estudiante tiene curso_id, buscar la información del curso
+        if est.get("curso_id"):
+            curso = await db["cursos"].find_one({"_id": ObjectId(est["curso_id"]) if isinstance(est["curso_id"], str) else est["curso_id"]})
+            if curso:
+                hijo_data["curso"] = {
+                    "nombre": curso.get("nombre", ""),
+                    "nivel": curso.get("nivel", ""),
+                    "turno": curso.get("turno", ""),
+                    "paralelo": curso.get("paralelo", "")
+                }
+        
+        results.append(hijo_data)
+        
+    return results
+
 @router.get("/{id}", response_model=EstudianteResponse)
 async def read_estudiante(id: str):
     db = get_database()
@@ -177,3 +276,5 @@ async def delete_estudiante(id: str):
     if not estudiante:
         raise HTTPException(status_code=404, detail="Estudiante not found")
     return await crud_estudiante.remove(db, id=id)
+
+
