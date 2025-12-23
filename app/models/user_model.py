@@ -21,6 +21,7 @@ class UserModel(BaseModel):
     # Datos Personales
     nombre: str = Field(..., description="Nombres") # Mantengo separado para flexibilidad aunque schema diga Completo
     apellido: str = Field(..., description="Apellidos")
+    username: Optional[str] = Field(None, description="Nombre de usuario (para administradores)")
 
     telefono: Optional[str] = Field(None, description="Teléfono o celular")
     direccion: Optional[str] = Field(None, description="Domicilio")

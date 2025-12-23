@@ -30,8 +30,12 @@ class AuthUserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
-    user: AuthUserResponse # Update to use proper schema for serialization
+    user: AuthUserResponse 
     
-class LoginRequest(BaseModel):
+class AdminLoginRequest(BaseModel):
     username: str
+    password: str
+
+class PapaLoginRequest(BaseModel):
+    email: EmailStr
     password: str

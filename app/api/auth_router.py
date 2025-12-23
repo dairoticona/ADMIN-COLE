@@ -8,7 +8,8 @@ from app.models.common import UserRole
 from app.schemas.auth_schemas import (
     AuthUserResponse, 
     Token, 
-    LoginRequest
+    AdminLoginRequest,
+    PapaLoginRequest
 )
 from app.core.config import settings
 from app.core.security import (
@@ -21,8 +22,11 @@ from jose import jwt, JWTError
 
 router = APIRouter()
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+from fastapi.security import HTTPAuthorizationCredentials
+
+async def get_current_user(token_auth: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
     """Obtener el usuario actual desde el token"""
+    token = token_auth.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudo validar las credenciales",
@@ -38,7 +42,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     db = get_database()
     collection = db["users"]
-    user = await collection.find_one({"email": username})
+    # Buscar por email o username (ya que 'sub' puede ser cualquiera de los dos)
+    user = await collection.find_one({
+        "$or": [
+            {"email": username},
+            {"username": username}
+        ]
+    })
     
     if user is None:
         raise credentials_exception
@@ -57,26 +67,67 @@ async def get_current_admin(current_user: dict = Depends(get_current_user)):
 
 
 
-from fastapi.security import OAuth2PasswordRequestForm
-
-@router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Login con username y password (compatible con Swagger UI)"""
+@router.post("/login/admin", response_model=Token)
+async def login_admin(credentials: AdminLoginRequest):
+    """Login para Administradores (Username + Password)"""
     db = get_database()
     collection = db["users"]
     
-    user = await collection.find_one({
-        "$or": [
-            {"username": form_data.username},
-            {"email": form_data.username}
-        ]
-    })
+    user = await collection.find_one({"username": credentials.username})
     
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+    if not user or not verify_password(credentials.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Username o contraseña incorrectos",
+            detail="Usuario o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if user.get("role") != UserRole.ADMIN:
+        raise HTTPException(
+             status_code=status.HTTP_403_FORBIDDEN,
+             detail="No tiene permisos de administrador"
+        )
+
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuario inactivo"
+        )
+    
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Para admin usamos username como sub
+    access_token = create_access_token(
+        data={"sub": user["username"], "role": user["role"]}, 
+        expires_delta=access_token_expires
+    )
+    
+    user["_id"] = str(user["_id"])
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": user
+    }
+
+@router.post("/login/padre", response_model=Token)
+async def login_padre(credentials: PapaLoginRequest):
+    """Login para Padres (Email + Password)"""
+    db = get_database()
+    collection = db["users"]
+    
+    user = await collection.find_one({"email": credentials.email})
+    
+    if not user or not verify_password(credentials.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    if user.get("role") != UserRole.PADRE:
+        raise HTTPException(
+             status_code=status.HTTP_403_FORBIDDEN,
+             detail="No tiene acceso como padre. Use el login de administrador."
         )
     
     if not user.get("is_active", True):
@@ -86,6 +137,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Para padres usamos email como sub
     access_token = create_access_token(
         data={"sub": user["email"], "role": user["role"]}, 
         expires_delta=access_token_expires

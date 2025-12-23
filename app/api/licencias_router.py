@@ -48,8 +48,8 @@ async def create_licencia(
         )
     
     # Verificar que el estudiante pertenezca al padre autenticado (usando hijos_ids del usuario)
-    # Nota: current_user["hijos_ids"] es una lista de strings
-    user_hijos_ids = current_user.get("hijos_ids", [])
+    # Nota: current_user["hijos_ids"] es una lista de IDs (pueden ser ObjectId o str)
+    user_hijos_ids = [str(uid) for uid in current_user.get("hijos_ids", [])]
     if str(estudiante["_id"]) not in user_hijos_ids:
         # Fallback por si la relación no está sincronizada en User, verificamos por lógica de negocio
         # Pero si 'padres_ids' fue eliminado de Estudiante, dependemos de User.hijos_ids.
