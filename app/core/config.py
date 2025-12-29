@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 from pydantic import Field
 import os
 
@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False, env="DEBUG")
     
     # Cloudinary Configuration
-    CLOUDINARY_CLOUD_NAME: str = Field(..., env="CLOUDINARY_CLOUD_NAME")
-    CLOUDINARY_API_KEY: str = Field(..., env="CLOUDINARY_API_KEY")
-    CLOUDINARY_API_SECRET: str = Field(..., env="CLOUDINARY_API_SECRET")
+    CLOUDINARY_CLOUD_NAME: Optional[str] = Field(None, env="CLOUDINARY_CLOUD_NAME")
+    CLOUDINARY_API_KEY: Optional[str] = Field(None, env="CLOUDINARY_API_KEY")
+    CLOUDINARY_API_SECRET: Optional[str] = Field(None, env="CLOUDINARY_API_SECRET")
     
     class Config:
         env_file = ".env"
