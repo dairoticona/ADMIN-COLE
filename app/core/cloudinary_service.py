@@ -1,66 +1,23 @@
 """
-Servicio de Cloudinary para subida de imágenes
+Servicio de Cloudinary para subida de imágenes (Deshabilitado)
 """
-import cloudinary
-import cloudinary.uploader
 from app.core.config import settings
 
-# Configurar Cloudinary
-cloudinary.config(
-    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-    api_key=settings.CLOUDINARY_API_KEY,
-    api_secret=settings.CLOUDINARY_API_SECRET,
-    secure=True
-)
+# Cloudinary deshabilitado para evitar errores de importación
+# import cloudinary
+# import cloudinary.uploader
 
 async def upload_image(file_bytes: bytes, folder: str = "licencias") -> dict:
     """
-    Subir imagen a Cloudinary
-    
-    Args:
-        file_bytes: Bytes de la imagen
-        folder: Carpeta en Cloudinary donde guardar
-        
-    Returns:
-        dict con url, public_id y otros datos
+    Subir imagen a Cloudinary (Stub)
     """
-    try:
-        result = cloudinary.uploader.upload(
-            file_bytes,
-            folder=folder,
-            resource_type="image",
-            allowed_formats=["jpg", "jpeg", "png", "pdf"],
-            transformation=[
-                {"width": 1200, "height": 1200, "crop": "limit"},
-                {"quality": "auto:good"}
-            ]
-        )
-        return {
-            "success": True,
-            "url": result.get("secure_url"),
-            "public_id": result.get("public_id"),
-            "format": result.get("format"),
-            "width": result.get("width"),
-            "height": result.get("height")
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+    return {
+        "success": False,
+        "error": "Cloudinary service is disabled because the module is not installed."
+    }
 
 async def delete_image(public_id: str) -> bool:
     """
-    Eliminar imagen de Cloudinary
-    
-    Args:
-        public_id: ID público de la imagen
-        
-    Returns:
-        True si se eliminó correctamente
+    Eliminar imagen de Cloudinary (Stub)
     """
-    try:
-        result = cloudinary.uploader.destroy(public_id)
-        return result.get("result") == "ok"
-    except Exception:
-        return False
+    return False
