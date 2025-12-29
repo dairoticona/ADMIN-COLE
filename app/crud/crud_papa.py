@@ -35,6 +35,19 @@ class CRUDPapa(CRUDBase[PapaModel, PapaCreate, PapaUpdate]):
         # Just return current state.
         return await self.get(db, id=papa_id)
 
+    async def remove_child(self, db: Any, *, papa_id: str, child_id: str) -> Optional[PapaModel]:
+        collection = db[self.collection_name]
+        
+        result = await collection.update_one(
+            {"_id": ObjectId(papa_id), "role": "PADRE"},
+            {"$pull": {"hijos_ids": ObjectId(child_id)}}
+        )
+        
+        if result.modified_count > 0:
+            return await self.get(db, id=papa_id)
+            
+        return await self.get(db, id=papa_id)
+
     async def create(self, db: Any, *, obj_in: PapaCreate) -> PapaModel:
         # Convert Pydantic model to dict
         obj_in_data = obj_in.model_dump()

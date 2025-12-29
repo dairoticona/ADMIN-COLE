@@ -223,3 +223,18 @@ async def assign_child(id: str, child_id: str = Body(..., embed=True)):
         
     updated_papa = await crud_papa.add_child(db, papa_id=id, child_id=child_id)
     return updated_papa
+
+@router.delete("/{id}/hijos/{child_id}", response_model=PapaResponse)
+async def unassign_child(id: str, child_id: str):
+    """
+    Desvincular un hijo de un padre.
+    """
+    db = get_database()
+    
+    # Verificar que el padre existe
+    user = await crud_papa.get(db, id=id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Padre no encontrado")
+        
+    updated_papa = await crud_papa.remove_child(db, papa_id=id, child_id=child_id)
+    return updated_papa

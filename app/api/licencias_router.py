@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, UploadFile, File
 from typing import List, Optional, Any
 import math
 from app.crud.crud_licencia import licencia as crud_licencia
@@ -7,6 +7,7 @@ from datetime import datetime, date
 from bson import ObjectId
 
 from app.core.database import get_database
+from app.core.cloudinary_service import upload_image
 from app.models.common import UserRole
 from app.schemas.licencia_schema import LicenciaCreate, LicenciaUpdate, LicenciaResponse
 from app.api.auth_router import get_current_user, get_current_admin
@@ -110,6 +111,50 @@ async def create_licencia(
         licencia_dict["fecha_fin"] = licencia_dict["fecha_fin"].date()
     
     return licencia_dict
+
+
+@router.post("/upload-image", status_code=status.HTTP_200_OK)
+async def upload_licencia_image(
+    file: UploadFile = File(..., description="Imagen de la licencia (jpg, png, pdf)"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Subir imagen para licencia a Cloudinary.
+    Retorna la URL para usar en el campo 'adjunto' al crear la licencia.
+    """
+    # Validar tipo de archivo
+    allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no permitido. Permitidos: jpg, png, pdf"
+        )
+    
+    # Leer bytes del archivo
+    file_bytes = await file.read()
+    
+    # Validar tamaño (máximo 5MB)
+    max_size = 5 * 1024 * 1024  # 5MB
+    if len(file_bytes) > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo es demasiado grande. Máximo permitido: 5MB"
+        )
+    
+    # Subir a Cloudinary
+    result = await upload_image(file_bytes, folder="licencias")
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir imagen: {result.get('error', 'Error desconocido')}"
+        )
+    
+    return {
+        "message": "Imagen subida correctamente",
+        "url": result.get("url"),
+        "public_id": result.get("public_id")
+    }
 
 
 @router.get("/", response_model=PaginatedResponse[LicenciaResponse])
