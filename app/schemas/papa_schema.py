@@ -34,7 +34,7 @@ class PapaUpdate(BaseModel):
     direccion: Optional[str] = None
     numero_referencia: Optional[str] = None
     nombre_referencia: Optional[str] = None
-    hijos_ids: Optional[List[PyObjectId]] = None
+    # hijos_ids removed to prevent update via this endpoint
     is_active: Optional[bool] = None
 
 class PapaResponse(PapaBase):

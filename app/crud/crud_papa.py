@@ -9,6 +9,25 @@ from app.models.curso_model import TurnoCurso
 from app.schemas.estudiante_schema import GradoFilter
 
 class CRUDPapa(CRUDBase[PapaModel, PapaCreate, PapaUpdate]):
+    
+    async def update(
+        self, 
+        db: Any, 
+        *, 
+        db_obj: PapaModel, 
+        obj_in: Union[PapaUpdate, Dict[str, Any]]
+    ) -> PapaModel:
+        if isinstance(obj_in, dict):
+            update_data = obj_in
+        else:
+            update_data = obj_in.model_dump(exclude_unset=True)
+            
+        # Explicitly remove hijos_ids if present
+        if "hijos_ids" in update_data:
+            del update_data["hijos_ids"]
+            
+        return await super().update(db, db_obj=db_obj, obj_in=update_data)
+
     async def get_by_email(self, db: Any, *, email: str) -> Optional[PapaModel]:
         # We access "users" collection because Papas are users
         collection = db[self.collection_name]
@@ -58,8 +77,15 @@ class CRUDPapa(CRUDBase[PapaModel, PapaCreate, PapaUpdate]):
             if password:
                 obj_in_data["hashed_password"] = password
         
+            if password:
+                obj_in_data["hashed_password"] = password
+        
         # Ensure role is PADRE
         obj_in_data["role"] = "PADRE"
+        
+        # Prevent hijos_ids from being set on create if passed (though schema suggests empty list default)
+        # But if we want to allow initial creation with children, we can leave it.
+        # The requirement is about UPDATE. 
         
         # Set defaults
         if "is_active" not in obj_in_data:
