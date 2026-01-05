@@ -13,13 +13,14 @@ class LibretaBase(BaseModel):
 class LibretaCreate(LibretaBase):
     # En el POST, el archivo se maneja aparte por UploadFile, 
     # pero este schema valida los campos de texto si se usan como JSON (aunque usaremos Form).
-    pass
+    archivo_path: str = Field(..., description="URL o ruta del archivo")
 
 class LibretaUpdate(BaseModel):
     estudiante_id: Optional[PyObjectId] = Field(None)
     gestion: Optional[int] = Field(None)
     titulo: Optional[str] = Field(None)
     estado_documento: Optional[EstadoDocumento] = Field(None)
+    archivo_path: Optional[str] = Field(None, description="URL o ruta del archivo")
 
 class LibretaResponse(LibretaBase):
     id: PyObjectId = Field(..., alias="_id")

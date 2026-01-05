@@ -3,7 +3,9 @@ import shutil
 import uuid
 from typing import List, Optional
 import math
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, status, Depends
+from bson import ObjectId
+
 from app.crud.crud_libreta import libreta as crud_libreta
 from app.schemas.libreta_schema import LibretaCreate, LibretaUpdate, LibretaResponse
 from app.schemas.common import PaginatedResponse
@@ -12,11 +14,13 @@ from app.models.libreta_model import EstadoDocumento
 from app.models.malla_curricular_model import NivelEducativo
 from app.models.curso_model import TurnoCurso
 from app.schemas.estudiante_schema import GradoFilter
+from app.models.common import UserRole
+
+# Auth & Cloudinary
+from app.api.auth_router import get_current_user, get_current_admin
+from app.core.cloudinary_service import upload_image, delete_image
 
 router = APIRouter()
-
-UPLOAD_DIR = "uploads/libretas"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("/", response_model=PaginatedResponse[LibretaResponse])
 async def read_libretas(
@@ -27,14 +31,41 @@ async def read_libretas(
     grado: Optional[GradoFilter] = Query(None, description="Filtro por Grado"),
     turno: Optional[TurnoCurso] = Query(None, description="Filtro por Turno"),
     paralelo: Optional[str] = Query(None, description="Filtro por Paralelo (A, B, etc)"),
-    estado_documento: Optional[EstadoDocumento] = Query(None, description="Estado del documento")
+    estado_documento: Optional[EstadoDocumento] = Query(None, description="Estado del documento"),
+    current_user: dict = Depends(get_current_user)
 ):
+    """
+    Listar libretas.
+    - Admins: Ven todo.
+    - Padres: Ven solo las de sus hijos.
+    """
     db = get_database()
+    
+    rbac_filters = {}
+    if current_user["role"] != UserRole.ADMIN:
+        # Parents only see their children
+        user_hijos_ids = current_user.get("hijos_ids", [])
+        if not user_hijos_ids:
+             return {
+                "total": 0, "page": page, "per_page": per_page, "total_pages": 0, "data": []
+            }
+        
+        # Ensure ObjectIds
+        hijos_oids = [ObjectId(hid) if isinstance(hid, str) else hid for hid in user_hijos_ids]
+        rbac_filters["estudiante_id"] = {"$in": hijos_oids}
+        
+        # Non-admins can only see PUBLISHED report cards usually? 
+        # Or maybe drafts if it's discussed? 
+        # Typically parents only see PUBLICADA.
+        if not estado_documento:
+             rbac_filters["estado_documento"] = EstadoDocumento.PUBLICADA
+    
     items, total = await crud_libreta.get_paginated(
         db, 
         page=page, 
         per_page=per_page, 
         q=q,
+        filters=rbac_filters,
         nivel=nivel,
         grado=grado,
         turno=turno,
@@ -58,36 +89,57 @@ async def create_libreta(
     gestion: int = Form(...),
     titulo: Optional[str] = Form(None),
     estado_documento: EstadoDocumento = Form(EstadoDocumento.BORRADOR),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_admin) # Only Admins
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un PDF")
-
-    # Guardar archivo
-    filename = f"{uuid.uuid4()}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    """
+    Subir libreta (PDF o Imagen). Solo Admins.
+    """
+    # 1. Validar archivo
+    allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
+    if file.content_type not in allowed_types and not any(file.filename.lower().endswith(ext) for ext in [".pdf", ".jpg", ".jpeg", ".png"]):
+         raise HTTPException(status_code=400, detail="Formato no permitido. Use PDF, JPG o PNG.")
+         
+    # 2. Subir a Cloudinary
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024: # 10MB limit
+         raise HTTPException(status_code=400, detail="Archivo muy grande (Max 10MB)")
+         
+    upload_result = await upload_image(content, folder="libretas")
+    if not upload_result.get("success"):
+        raise HTTPException(status_code=500, detail=f"Error subiendo archivo: {upload_result.get('error')}")
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
+    file_url = upload_result.get("url")
+
+    # 3. Crear en BD
     libreta_in = LibretaCreate(
         estudiante_id=estudiante_id,
         gestion=gestion,
         titulo=titulo,
-        estado_documento=estado_documento
+        estado_documento=estado_documento,
+        archivo_path=file_url # Reuse this field for URL
     )
     
-    # Manually adding the file path that isn't in the base API model usually or handled via extra dict
-    # Since crud.create takes obj_in, we'll pass a dict to metadata
     db = get_database()
-    return await crud_libreta.create_with_file(db, obj_in=libreta_in, file_path=file_path)
+    return await crud_libreta.create(db, obj_in=libreta_in)
 
 @router.get("/{id}", response_model=LibretaResponse)
-async def read_libreta(id: str):
+async def read_libreta(
+    id: str,
+    current_user: dict = Depends(get_current_user)
+):
     db = get_database()
     libreta = await crud_libreta.get(db, id=id)
     if not libreta:
         raise HTTPException(status_code=404, detail="Libreta not found")
+    
+    # Check permissions
+    if current_user["role"] != UserRole.ADMIN:
+        # Check against children
+        user_hijos_ids = [str(x) for x in current_user.get("hijos_ids", [])]
+        if str(libreta.estudiante_id) not in user_hijos_ids:
+             raise HTTPException(status_code=403, detail="No tiene permiso para ver esta libreta")
+    
     return libreta
 
 @router.put("/{id}", response_model=LibretaResponse)
@@ -97,51 +149,49 @@ async def update_libreta(
     gestion: Optional[int] = Form(None),
     titulo: Optional[str] = Form(None),
     estado_documento: Optional[EstadoDocumento] = Form(None),
-    file: Optional[UploadFile] = File(None)
+    file: Optional[UploadFile] = File(None),
+    current_user: dict = Depends(get_current_admin) # Only Admins
 ):
     db = get_database()
     libreta_db = await crud_libreta.get(db, id=id)
     if not libreta_db:
         raise HTTPException(status_code=404, detail="Libreta not found")
 
-    new_file_path = None
+    new_file_url = None
     if file:
-        if not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="El archivo debe ser un PDF")
+        allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/jpg"]
+        if file.content_type not in allowed_types and not any(file.filename.lower().endswith(ext) for ext in [".pdf", ".jpg", ".jpeg", ".png"]):
+            raise HTTPException(status_code=400, detail="Formato no permitido. Use PDF, JPG o PNG.")
         
-        filename = f"{uuid.uuid4()}_{file.filename}"
-        new_file_path = os.path.join(UPLOAD_DIR, filename)
-        
-        with open(new_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        content = await file.read()
+        upload_result = await upload_image(content, folder="libretas")
+        if not upload_result.get("success"):
+            raise HTTPException(status_code=500, detail=f"Error subiendo archivo: {upload_result.get('error')}")
             
-        # Opcional: Borrar archivo viejo si existe
-        # if libreta_db.archivo_path and os.path.exists(libreta_db.archivo_path):
-        #     os.remove(libreta_db.archivo_path)
-
+        new_file_url = upload_result.get("url")
+        
     # Construir objeto update
     update_data = {}
     if estudiante_id: update_data["estudiante_id"] = estudiante_id
     if gestion: update_data["gestion"] = gestion
     if titulo: update_data["titulo"] = titulo
     if estado_documento: update_data["estado_documento"] = estado_documento
-    if new_file_path: update_data["archivo_path"] = new_file_path
+    if new_file_url: update_data["archivo_path"] = new_file_url
 
-    # Usamos LibretaUpdate solo para validación parcial si quisiéramos, pero aquí construimos dict
     return await crud_libreta.update_generic(db, db_obj=libreta_db, update_data=update_data)
 
 @router.delete("/{id}", response_model=LibretaResponse)
-async def delete_libreta(id: str):
+async def delete_libreta(
+    id: str,
+    current_user: dict = Depends(get_current_admin)
+):
     db = get_database()
     libreta = await crud_libreta.get(db, id=id)
     if not libreta:
         raise HTTPException(status_code=404, detail="Libreta not found")
         
-    # Opcional: Borrar archivo físico
-    if libreta.archivo_path and os.path.exists(libreta.archivo_path):
-        try:
-            os.remove(libreta.archivo_path)
-        except:
-            pass
-            
+    # Optional: Delete from Cloudinary?
+    # We don't store Public ID easily in this model (just URL), so skipping for now unless we parse it.
+    # Cloudinary URLs usually: .../upload/.../folder/public_id.ext
+    
     return await crud_libreta.remove(db, id=id)
