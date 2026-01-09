@@ -15,7 +15,42 @@ async def read_eventos(skip: int = 0, limit: int = 100):
 @router.post("/", response_model=EventoResponse)
 async def create_evento(evento_in: EventoCreate):
     db = get_database()
-    return await crud_evento.create(db, obj_in=evento_in)
+    evento = await crud_evento.create(db, obj_in=evento_in)
+    
+    # === ENVIAR NOTIFICACIÓN A TODOS LOS PADRES ===
+    from app.crud.crud_notificacion import notificacion as crud_notificacion
+    from app.models.common import UserRole
+    from bson import ObjectId
+    
+    try:
+        # Obtener todos los padres activos
+        users_collection = db["users"]
+        padre_users = []
+        
+        cursor = users_collection.find({"role": UserRole.PADRE, "is_active": True})
+        async for padre in cursor:
+            padre_users.append(padre)
+        
+        if padre_users:
+            # Crear notificaciones para todos los padres
+            notifications_to_create = []
+            for padre in padre_users:
+                notif_data = {
+                    "type": "event_created",
+                    "title": f"Nuevo Evento: {evento.get('titulo', 'Sin título')}",
+                    "message": f"Se ha programado un nuevo evento. Fecha: {evento.get('fecha', 'Por confirmar')}",
+                    "user_id": padre["_id"],
+                    "related_id": ObjectId(evento["_id"]) if isinstance(evento.get("_id"), str) else evento.get("_id")
+                }
+                notifications_to_create.append(notif_data)
+            
+            await crud_notificacion.create_many(db, notifications_to_create)
+    except Exception as e:
+        # No fallar si las notificaciones fallan, solo registrar
+        print(f"Error al crear notificaciones de evento: {e}")
+    
+    return evento
+
 
 @router.get("/{id}", response_model=EventoResponse)
 async def read_evento(id: str):

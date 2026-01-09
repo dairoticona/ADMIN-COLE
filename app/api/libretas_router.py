@@ -121,7 +121,46 @@ async def create_libreta(
     )
     
     db = get_database()
-    return await crud_libreta.create(db, obj_in=libreta_in)
+    libreta = await crud_libreta.create(db, obj_in=libreta_in)
+
+    # === ENVIAR NOTIFICACIÓN AL PADRE SI SE PUBLICA ===
+    if estado_documento == EstadoDocumento.PUBLICADA:
+        from app.crud.crud_notificacion import notificacion as crud_notificacion
+        from app.models.common import UserRole
+        
+        try:
+            # 1. Buscar a los padres del estudiante
+            # En este sistema, los padres tienen una lista de hijos_ids
+            est_oid = ObjectId(estudiante_id) if isinstance(estudiante_id, str) else estudiante_id
+            
+            cursor = db["users"].find({
+                "role": UserRole.PADRE,
+                "hijos_ids": est_oid,
+                "is_active": True
+            })
+            
+            # 2. Obtener nombre del estudiante para el mensaje
+            estudiante = await db["estudiantes"].find_one({"_id": est_oid})
+            est_nombre = f"{estudiante.get('nombre', '')} {estudiante.get('apellido', '')}".strip() if estudiante else "su hijo/a"
+            
+            notifications_to_create = []
+            async for padre in cursor:
+                notif_data = {
+                    "type": "libreta_published",
+                    "title": "Nueva Libreta Disponible 📋",
+                    "message": f"Se ha publicado una nueva libreta para {est_nombre} (Gestión {gestion})",
+                    "user_id": padre["_id"],
+                    "related_id": ObjectId(libreta["_id"]) if isinstance(libreta.get("_id"), str) else libreta.get("_id")
+                }
+                notifications_to_create.append(notif_data)
+            
+            if notifications_to_create:
+                await crud_notificacion.create_many(db, notifications_to_create)
+                
+        except Exception as e:
+            print(f"Error al enviar notificaciones de libreta: {e}")
+
+    return libreta
 
 @router.get("/{id}", response_model=LibretaResponse)
 async def read_libreta(
@@ -178,7 +217,47 @@ async def update_libreta(
     if estado_documento: update_data["estado_documento"] = estado_documento
     if new_file_url: update_data["archivo_path"] = new_file_url
 
-    return await crud_libreta.update_generic(db, db_obj=libreta_db, update_data=update_data)
+    updated_libreta = await crud_libreta.update_generic(db, db_obj=libreta_db, update_data=update_data)
+
+    # === ENVIAR NOTIFICACIÓN SI CAMBIA A PUBLICADA ===
+    # Solo notificar si el nuevo estado es PUBLICADA y el anterior no lo era
+    if estado_documento == EstadoDocumento.PUBLICADA and libreta_db.estado_documento != EstadoDocumento.PUBLICADA:
+        from app.crud.crud_notificacion import notificacion as crud_notificacion
+        from app.models.common import UserRole
+        
+        try:
+            est_id = updated_libreta.estudiante_id
+            est_oid = ObjectId(est_id) if isinstance(est_id, str) else est_id
+            gestion = updated_libreta.gestion
+            
+            cursor = db["users"].find({
+                "role": UserRole.PADRE,
+                "hijos_ids": est_oid,
+                "is_active": True
+            })
+            
+            # Obtener nombre del estudiante
+            estudiante = await db["estudiantes"].find_one({"_id": est_oid})
+            est_nombre = f"{estudiante.get('nombre', '')} {estudiante.get('apellido', '')}".strip() if estudiante else "su hijo/a"
+            
+            notifications_to_create = []
+            async for padre in cursor:
+                notif_data = {
+                    "type": "libreta_published",
+                    "title": "Nueva Libreta Disponible 📋",
+                    "message": f"Se ha publicado la libreta de {est_nombre} (Gestión {gestion})",
+                    "user_id": padre["_id"],
+                    "related_id": ObjectId(updated_libreta.id) if not isinstance(updated_libreta.id, ObjectId) else updated_libreta.id
+                }
+                notifications_to_create.append(notif_data)
+            
+            if notifications_to_create:
+                await crud_notificacion.create_many(db, notifications_to_create)
+                
+        except Exception as e:
+            print(f"Error al enviar notificaciones de actualización de libreta: {e}")
+
+    return updated_libreta
 
 @router.delete("/{id}", response_model=LibretaResponse)
 async def delete_libreta(

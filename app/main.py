@@ -12,6 +12,7 @@ from app.api.libretas_router import router as libretas_router
 from app.api.mallas_router import router as mallas_router
 from app.api.pagos_router import router as pagos_router
 from app.api.papas_router import router as papas_router
+from app.api.notificaciones_router import router as notificaciones_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -50,6 +51,7 @@ app.include_router(eventos_router, prefix="/api/eventos", tags=["eventos"])
 app.include_router(libretas_router, prefix="/api/libretas", tags=["libretas"])
 app.include_router(mallas_router, prefix="/api/mallas", tags=["mallas"])
 app.include_router(pagos_router, prefix="/api/pagos", tags=["pagos"])
+app.include_router(notificaciones_router, prefix="/api/notificaciones", tags=["notificaciones"])
 
 
 @app.get("/")

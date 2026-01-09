@@ -370,6 +370,34 @@ async def aprobar_licencia(
         {"$set": {"estado": "APROBADA", "updated_at": datetime.utcnow()}}
     )
     
+    # === ENVIAR NOTIFICACIÓN AL PADRE ===
+    from app.crud.crud_notificacion import notificacion as crud_notificacion
+    
+    padre_id = licencia.get("padre_id")
+    if padre_id:
+        # Obtener información del estudiante para el mensaje
+        estudiante_id = licencia.get("estudiante_id")
+        estudiante_nombre = "su hijo/a"
+        
+        if estudiante_id:
+            estudiante = await db["estudiantes"].find_one({"_id": estudiante_id})
+            if estudiante:
+                estudiante_nombre = f"{estudiante.get('nombre', '')} {estudiante.get('apellido', '')}".strip()
+        
+        notif_data = {
+            "type": "license_approved",
+            "title": "Licencia Aprobada ✅",
+            "message": f"La solicitud de licencia para {estudiante_nombre} ha sido aprobada.",
+            "user_id": padre_id,
+            "related_id": ObjectId(licencia_id)
+        }
+        
+        try:
+            await crud_notificacion.create(db, notif_data)
+        except Exception as e:
+            # No fallar si la notificación falla, solo registrar
+            print(f"Error al crear notificación: {e}")
+    
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
     if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
@@ -378,6 +406,7 @@ async def aprobar_licencia(
         updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia
+
 
 
 @router.post("/{licencia_id}/rechazar", response_model=LicenciaResponse)
@@ -410,6 +439,34 @@ async def rechazar_licencia(
         {"$set": {"estado": "RECHAZADA", "updated_at": datetime.utcnow()}}
     )
     
+    # === ENVIAR NOTIFICACIÓN AL PADRE ===
+    from app.crud.crud_notificacion import notificacion as crud_notificacion
+    
+    padre_id = licencia.get("padre_id")
+    if padre_id:
+        # Obtener información del estudiante para el mensaje
+        estudiante_id = licencia.get("estudiante_id")
+        estudiante_nombre = "su hijo/a"
+        
+        if estudiante_id:
+            estudiante = await db["estudiantes"].find_one({"_id": estudiante_id})
+            if estudiante:
+                estudiante_nombre = f"{estudiante.get('nombre', '')} {estudiante.get('apellido', '')}".strip()
+        
+        notif_data = {
+            "type": "license_rejected",
+            "title": "Licencia Rechazada ❌",
+            "message": f"La solicitud de licencia para {estudiante_nombre} ha sido rechazada.",
+            "user_id": padre_id,
+            "related_id": ObjectId(licencia_id)
+        }
+        
+        try:
+            await crud_notificacion.create(db, notif_data)
+        except Exception as e:
+            # No fallar si la notificación falla, solo registrar
+            print(f"Error al crear notificación: {e}")
+    
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
     if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
@@ -418,6 +475,7 @@ async def rechazar_licencia(
         updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia
+
 
 
 @router.post("/{licencia_id}/comentario", response_model=LicenciaResponse)
@@ -454,6 +512,34 @@ async def comentar_licencia(
         {"$set": {"respuesta_admin": comentario, "updated_at": datetime.utcnow()}}
     )
     
+    # === ENVIAR NOTIFICACIÓN AL PADRE ===
+    from app.crud.crud_notificacion import notificacion as crud_notificacion
+    
+    padre_id = licencia.get("padre_id")
+    if padre_id:
+        # Obtener información del estudiante para el mensaje
+        estudiante_id = licencia.get("estudiante_id")
+        estudiante_nombre = "su hijo/a"
+        
+        if estudiante_id:
+            estudiante = await db["estudiantes"].find_one({"_id": estudiante_id})
+            if estudiante:
+                estudiante_nombre = f"{estudiante.get('nombre', '')} {estudiante.get('apellido', '')}".strip()
+        
+        notif_data = {
+            "type": "license_commented",
+            "title": "Nuevo Comentario en Licencia 💬",
+            "message": f"El administrador ha agregado un comentario a la licencia de {estudiante_nombre}.",
+            "user_id": padre_id,
+            "related_id": ObjectId(licencia_id)
+        }
+        
+        try:
+            await crud_notificacion.create(db, notif_data)
+        except Exception as e:
+            # No fallar si la notificación falla, solo registrar
+            print(f"Error al crear notificación: {e}")
+    
     updated_licencia = await collection.find_one({"_id": ObjectId(licencia_id)})
     updated_licencia["_id"] = str(updated_licencia["_id"])
     if "fecha_inicio" in updated_licencia and isinstance(updated_licencia["fecha_inicio"], datetime):
@@ -462,3 +548,4 @@ async def comentar_licencia(
         updated_licencia["fecha_fin"] = updated_licencia["fecha_fin"].date()
     
     return updated_licencia
+
